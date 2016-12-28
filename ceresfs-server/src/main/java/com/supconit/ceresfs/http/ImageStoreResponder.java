@@ -80,7 +80,7 @@ public class ImageStoreResponder implements HttpResponder {
             Node node = disk.getNode();
             if (!node.equals(topology.localNode())) {
                 HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
-                        .newCall(request)
+                        .newCall(request.copy())
                         .onSuccess(response -> ctx.writeAndFlush(response.copy()))
                         .onError(exception -> ctx.writeAndFlush(
                                 HttpUtil.newResponse(INTERNAL_SERVER_ERROR, exception.getMessage())))
