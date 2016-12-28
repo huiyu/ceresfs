@@ -78,15 +78,6 @@ public class ImageStoreResponder implements HttpResponder {
 
             Disk disk = topology.route(resolver.getImageId());
             Node node = disk.getNode();
-            if (!node.equals(topology.localNode())) {
-                HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
-                        .newCall(request.copy())
-                        .onSuccess(response -> ctx.writeAndFlush(response.copy()))
-                        .onError(exception -> ctx.writeAndFlush(
-                                HttpUtil.newResponse(INTERNAL_SERVER_ERROR, exception.getMessage())))
-                        .execute();
-                return;
-            }
 
             if (LOG.isTraceEnabled()) {
                 LOG.trace("Image {} route to {}:{}:{}",
@@ -94,6 +85,16 @@ public class ImageStoreResponder implements HttpResponder {
                         node.getHostAddress(),
                         node.getPort(),
                         disk.getPath());
+            }
+
+            if (!node.equals(topology.localNode())) { // redirect
+                HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
+                        .newCall(request.copy())
+                        .onSuccess(r -> ctx.writeAndFlush(r.copy()))
+                        .onError(e -> ctx.writeAndFlush(
+                                HttpUtil.newResponse(INTERNAL_SERVER_ERROR, e.getMessage())))
+                        .execute();
+                return;
             }
 
             store.save(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
@@ -104,7 +105,6 @@ public class ImageStoreResponder implements HttpResponder {
                         // TODO 
                     })
                     .execute(false);
-
             ctx.writeAndFlush(HttpUtil.newResponse(OK, OK.reasonPhrase()));
         } finally {
             decoder.destroy();

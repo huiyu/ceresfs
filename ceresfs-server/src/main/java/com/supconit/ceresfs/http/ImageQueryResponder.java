@@ -60,35 +60,38 @@ public class ImageQueryResponder implements HttpResponder {
         List<String> ids = parameters.get("id");
         if (CollectionUtils.isEmpty(ids)) {
             ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST, "Image id is not provided."));
-        } else if (ids.size() > 1) {
-            ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST, "Image id is not explicitly specified."));
-        } else {
-            try {
-                long id = Long.valueOf(ids.get(0));
-                Disk disk = topology.route(id);
-                Node node = disk.getNode();
-                if (node.equals(topology.localNode())) {
-                    Image.Index index = directory.get(disk, id);
-                    if (index == null) {
-                        // FIXME: maybe in store's buffer
-                        ctx.writeAndFlush(HttpUtil.newResponse(NOT_FOUND, "Image[id=" + id + "] not found."));
-                    } else {
-                        Image image = store.get(disk, index);
-                        String mimeType = image.getIndex().getType().getMimeType();
-                        ctx.writeAndFlush(HttpUtil.newResponse(OK, mimeType, image.getData()));
-                    }
-                } else {
-                    // redirect
-                    HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
-                            .newCall(req.copy())
-                            .onSuccess(r -> ctx.writeAndFlush(r.copy()))
-                            .onError(e -> ctx.writeAndFlush(HttpUtil.newResponse(INTERNAL_SERVER_ERROR, e.getMessage())))
-                            .execute();
+            return;
+        }
 
-                }
-            } catch (NumberFormatException e) {
-                ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST, ids.get(0) + " can't cast to long."));
+        if (ids.size() > 1) {
+            ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST, "Image id is not explicitly specified."));
+            return;
+        }
+        try {
+            long id = Long.valueOf(ids.get(0));
+            Disk disk = topology.route(id);
+            Node node = disk.getNode();
+            if (!node.equals(topology.localNode())) { // redirect
+                HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
+                        .newCall(req.copy())
+                        .onSuccess(r -> ctx.writeAndFlush(r.copy()))
+                        .onError(e -> ctx.writeAndFlush(
+                                HttpUtil.newResponse(INTERNAL_SERVER_ERROR, e.getMessage())))
+                        .execute();
+                return;
             }
+
+            Image.Index index = directory.get(disk, id);
+            if (index == null) {
+                // FIXME: maybe in store's buffer
+                ctx.writeAndFlush(HttpUtil.newResponse(NOT_FOUND, "Image[id=" + id + "] not found."));
+                return;
+            }
+            Image image = store.get(disk, index);
+            String mimeType = image.getIndex().getType().getMimeType();
+            ctx.writeAndFlush(HttpUtil.newResponse(OK, mimeType, image.getData()));
+        } catch (NumberFormatException e) {
+            ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST, ids.get(0) + " can't cast to long."));
         }
     }
 }
