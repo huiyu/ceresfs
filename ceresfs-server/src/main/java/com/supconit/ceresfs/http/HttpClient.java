@@ -8,7 +8,6 @@ import org.springframework.util.Assert;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
@@ -20,9 +19,9 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpRequestEncoder;
 import io.netty.handler.codec.http.HttpResponseDecoder;
 
@@ -66,7 +65,7 @@ public class HttpClient {
         }
     }
 
-    public HttpRequestBuilder newCall(FullHttpRequest request) {
+    public HttpRequestBuilder newCall(HttpRequest request) {
         return new HttpRequestBuilder(request, this);
     }
 
@@ -95,21 +94,15 @@ public class HttpClient {
 
     public static class HttpRequestBuilder {
 
-        private FullHttpRequest request;
-        private EventHandler<FullHttpResponse> onCompletion = r -> {
-        }; // FIXME: do nothing?
+        private HttpRequest request;
+        private EventHandler<FullHttpResponse> onCompletion = r -> { }; // FIXME: do nothing?
         private EventHandler<Throwable> onException = Throwable::printStackTrace;
 
         private HttpClient client;
 
-        public HttpRequestBuilder(FullHttpRequest request, HttpClient client) {
+        public HttpRequestBuilder(HttpRequest request, HttpClient client) {
             this.request = request;
             this.client = client;
-        }
-
-        public HttpRequestBuilder content(byte[] content) {
-            request = request.replace(Unpooled.wrappedBuffer(content));
-            return this;
         }
 
         public HttpRequestBuilder setHeader(String key, Object value) {

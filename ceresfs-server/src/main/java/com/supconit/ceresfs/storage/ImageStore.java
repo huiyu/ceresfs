@@ -10,7 +10,5 @@ public interface ImageStore {
 
     ImageSaveTask save(Disk disk, long id, Image.Type type, byte[] data) throws IOException;
 
-
     void delete(Disk disk, Image.Index index) throws IOException;
-
 }
