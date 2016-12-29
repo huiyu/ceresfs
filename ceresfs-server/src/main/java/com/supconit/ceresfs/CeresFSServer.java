@@ -21,17 +21,18 @@ import org.springframework.stereotype.Component;
 public class CeresFSServer {
 
     private static final Logger LOG = LoggerFactory.getLogger(CeresFSServer.class);
-    private static final int AGGREGATOR_BUFFER_SIZE = 1024 * 1024 * 1024;
 
     private final int port;
     private final CeresFSServerHandler handler;
     private final EventLoopGroup bossGroup = new NioEventLoopGroup();
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
+    private final int aggregatorSize;
 
     @Autowired
     public CeresFSServer(CeresFSConfiguration configuration, CeresFSServerHandler handler) {
         this.port = configuration.getPort();
         this.handler = handler;
+        this.aggregatorSize = configuration.getImageMaxSize() + 1024 * 16;
     }
 
     public void start() throws InterruptedException {
@@ -44,7 +45,7 @@ public class CeresFSServer {
                         ch.pipeline()
                                 .addLast("encoder", new HttpResponseEncoder())
                                 .addLast("decoder", new HttpRequestDecoder())
-                                .addLast("aggregator", new HttpObjectAggregator(AGGREGATOR_BUFFER_SIZE))
+                                .addLast("aggregator", new HttpObjectAggregator(aggregatorSize))
                                 .addLast(handler);
                     }
                 })

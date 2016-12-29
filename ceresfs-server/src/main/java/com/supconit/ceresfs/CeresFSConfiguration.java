@@ -20,7 +20,8 @@ public class CeresFSConfiguration {
     private String mode;
     @Value("${ceresfs.volume.limit:17179869184}")
     private long volumeLimit; // default 16GB
-    
+    @Value("${ceresfs.image.maxSize:10485760}")
+    private int imageMaxSize;
 
     public int getPort() {
         return port;
@@ -48,6 +49,10 @@ public class CeresFSConfiguration {
 
     public long getVolumeLimit() {
         return volumeLimit;
+    }
+
+    public int getImageMaxSize() {
+        return imageMaxSize;
     }
 }
 
