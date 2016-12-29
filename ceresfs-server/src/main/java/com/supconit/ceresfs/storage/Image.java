@@ -101,7 +101,8 @@ public class Image implements Serializable {
 
     public static class Index implements Serializable { // total 46 byte
 
-        public static final int DEFAULT_LENGTH = 64;
+        // should never change this value.
+        public static final int FIXED_LENGTH = 64;
 
         private long id; // 8 byte
         private long volume; // 8 byte

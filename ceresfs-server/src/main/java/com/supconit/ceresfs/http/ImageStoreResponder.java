@@ -97,14 +97,15 @@ public class ImageStoreResponder implements HttpResponder {
                 return;
             }
 
-            store.save(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
+            // FIXME: to to check id
+            store.prepareSave(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
                     .setTime(resolver.getImageTime())
                     .setExpireTime(resolver.getImageExpireTime())
                     .onSuccess(image -> directory.save(disk, image.getIndex()))
                     .onError(error -> {
                         // TODO 
                     })
-                    .execute(false);
+                    .save(false);
             ctx.writeAndFlush(HttpUtil.newResponse(OK, OK.reasonPhrase()));
         } finally {
             decoder.destroy();

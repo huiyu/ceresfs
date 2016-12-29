@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 public class CeresFSServer {
 
     private static final Logger LOG = LoggerFactory.getLogger(CeresFSServer.class);
-    private static final int AGGREGATOR_BUFFER_SIZE = 512 * 1024;
+    private static final int AGGREGATOR_BUFFER_SIZE = 1024 * 1024 * 1024;
 
     private final int port;
     private final CeresFSServerHandler handler;

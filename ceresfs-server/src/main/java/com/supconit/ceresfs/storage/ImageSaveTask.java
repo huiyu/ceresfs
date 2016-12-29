@@ -12,5 +12,5 @@ public interface ImageSaveTask {
 
     ImageSaveTask onError(EventHandler<ImageSaveError> handler);
 
-    void execute(boolean sync);
+    void save(boolean sync);
 }

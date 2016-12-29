@@ -4,12 +4,14 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 
+import com.supconit.ceresfs.CeresFSConfiguration;
 import com.supconit.ceresfs.EventHandler;
 import com.supconit.ceresfs.topology.Disk;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
@@ -27,6 +29,7 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
 
     private static final Logger LOG = LoggerFactory.getLogger(VolumeImageStore.class);
 
+    private final long volumeLimit;
     private final Map<String, ImageStoreWorker> workerByPath = new HashMap<>();
     private final Cache<String, VolumeFile.Reader> readerByPath = CacheBuilder
             .newBuilder()
@@ -42,8 +45,14 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
             })
             .build();
 
-    @Value("${ceresfs.volume.limit:107374182400}")
-    private long volumeLimit;
+    public VolumeImageStore(long volumeLimit) {
+        this.volumeLimit = volumeLimit;
+    }
+
+    @Autowired
+    public VolumeImageStore(CeresFSConfiguration configuration) {
+        this.volumeLimit = configuration.getVolumeLimit();
+    }
 
     @Override
     public Image get(Disk disk, Image.Index index) throws IOException {
@@ -60,7 +69,7 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
     }
 
     @Override
-    public ImageSaveTask save(Disk disk, long id, Image.Type type, byte[] data) {
+    public ImageSaveTask prepareSave(Disk disk, long id, Image.Type type, byte[] data) {
         return new DefaultImageSaveTask(this, disk, id, type, data);
     }
 
@@ -86,9 +95,9 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
         ImageStoreWorker worker = workerByPath.get(disk.getPath());
         if (worker == null) {
             synchronized (workerByPath) {
-                LOG.info("Start new worker {}", disk.getPath());
                 worker = workerByPath.get(disk.getPath());
                 if (worker == null) {
+                    LOG.info("Start new worker {}", disk.getPath());
                     worker = new ImageStoreWorker(disk.getPath(), volumeLimit);
                     worker.start();
                     workerByPath.put(disk.getPath(), worker);
@@ -117,7 +126,11 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
         private Disk disk;
 
 
-        public DefaultImageSaveTask(VolumeImageStore store, Disk disk, long id, Image.Type type, byte[] data) {
+        public DefaultImageSaveTask(VolumeImageStore store,
+                                    Disk disk,
+                                    long id,
+                                    Image.Type type,
+                                    byte[] data) {
             this.store = store;
             this.disk = disk;
             Image.Index index = new Image.Index();
@@ -156,16 +169,15 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
         }
 
         @Override
-        public void execute(boolean sync) {
-            if (sync) {
-                // TODO wait to complete
-            } else {
-                try {
-                    ImageStoreWorker worker = store.getOrCreateWorker(disk);
-                    worker.put(this);
-                } catch (IOException e) {
-                    this.errorHandler.handle(new ImageSaveError(image, e));
+        public synchronized void save(boolean sync) {
+            try {
+                ImageStoreWorker worker = store.getOrCreateWorker(disk);
+                worker.put(this);
+                if (sync) {
+                    wait();
                 }
+            } catch (IOException | InterruptedException e) {
+                this.errorHandler.handle(new ImageSaveError(image, e));
             }
         }
     }
@@ -204,13 +216,7 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
         }
 
         public void put(DefaultImageSaveTask task) throws IOException {
-            int length = task.image.getData().length;
-            if (length + fileOffset > sizeLimit) {
-                newVolumeFile();
-            }
-
             queue.offer(task);
-            fileOffset += length;
         }
 
 
@@ -230,11 +236,21 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
                 DefaultImageSaveTask task = take();
                 Image image = task.image;
                 try {
+                    int length = image.getData().length + Image.Index.FIXED_LENGTH;
+                    if (length + fileOffset > sizeLimit) {
+                        newVolumeFile();
+                    }
+                    this.fileOffset += length;
+                   
                     this.volumeFileWriter.write(image);
                     this.volumeFileWriter.flush();
                     task.successHandler.handle(image);
                 } catch (Exception e) {
                     task.errorHandler.handle(new ImageSaveError(image, e));
+                } finally {
+                    synchronized (task) {
+                        task.notifyAll();
+                    }
                 }
             }
         }
@@ -249,7 +265,7 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
             }
         }
 
-        private void newVolumeFile() throws IOException {
+        private synchronized void newVolumeFile() throws IOException {
             // using timestamp as volume file name
             String fileName = String.valueOf(System.currentTimeMillis());
             File file = new File(diskPath, fileName);
@@ -259,10 +275,13 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
             }
             this.volumeFile = file;
             this.fileOffset = 0L;
-
+            if (this.volumeFileWriter != null) {
+                this.volumeFileWriter.close();
+            }
+            this.volumeFileWriter = VolumeFile.createWriter(volumeFile);
         }
 
-        private File getLatestVolume(File[] files) {
+        private synchronized File getLatestVolume(File[] files) {
             int length = files.length;
             if (length == 0) {
                 return null;

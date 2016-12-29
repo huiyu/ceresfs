@@ -18,6 +18,9 @@ public class CeresFSConfiguration {
     private int vnodeFactor;
     @Value("${ceresfs.mode")
     private String mode;
+    @Value("${ceresfs.volume.limit:17179869184}")
+    private long volumeLimit; // default 16GB
+    
 
     public int getPort() {
         return port;
@@ -41,6 +44,10 @@ public class CeresFSConfiguration {
 
     public String getMode() {
         return mode;
+    }
+
+    public long getVolumeLimit() {
+        return volumeLimit;
     }
 }
 

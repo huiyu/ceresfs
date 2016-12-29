@@ -10,7 +10,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 
 public class VolumeFile {
-
+    
     private final File file;
 
     public VolumeFile(File file) {
@@ -24,7 +24,6 @@ public class VolumeFile {
     public File getFile() {
         return file;
     }
-
 
     public static Reader createReader(File file) throws FileNotFoundException {
         return new Reader(file);
@@ -88,7 +87,7 @@ public class VolumeFile {
             this.out = new BufferedOutputStream(new FileOutputStream(file, true));
         }
 
-        public void write(Image image) throws IOException {
+        public synchronized void write(Image image) throws IOException {
             Image.Index index = image.getIndex(); // 46 bytes, padding to 64 bytes
             byte[] data = image.getData();
 
@@ -115,7 +114,7 @@ public class VolumeFile {
             size += capacity;
         }
 
-        public void flush() throws IOException {
+        public synchronized void flush() throws IOException {
             this.out.flush();
         }
 
