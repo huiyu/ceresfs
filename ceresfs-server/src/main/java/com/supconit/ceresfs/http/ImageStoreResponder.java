@@ -1,5 +1,6 @@
 package com.supconit.ceresfs.http;
 
+import com.supconit.ceresfs.CeresFSConfiguration;
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.ImageDirectory;
 import com.supconit.ceresfs.storage.ImageStore;
@@ -45,12 +46,18 @@ public class ImageStoreResponder implements HttpResponder {
 
     private static final DefaultHttpDataFactory USE_MEMORY = new DefaultHttpDataFactory(false);
 
+    private final CeresFSConfiguration configuration;
     private final Topology topology;
     private final ImageDirectory directory;
     private final ImageStore store;
 
+
     @Autowired
-    public ImageStoreResponder(Topology topology, ImageDirectory directory, ImageStore store) {
+    public ImageStoreResponder(CeresFSConfiguration configuration,
+                               Topology topology,
+                               ImageDirectory directory,
+                               ImageStore store) {
+        this.configuration = configuration;
         this.topology = topology;
         this.directory = directory;
         this.store = store;
@@ -97,7 +104,15 @@ public class ImageStoreResponder implements HttpResponder {
                 return;
             }
 
-            // FIXME: to to check id
+            // image id existence check
+            if (configuration.isImageExistenceCheckEnabled()) {
+                if (!directory.contains(disk, resolver.getImageId())) {
+                    ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST,
+                            "Image[id=" + resolver.getImageId() + "] already exist"));
+                    return;
+                }
+            }
+
             store.prepareSave(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
                     .setTime(resolver.getImageTime())
                     .setExpireTime(resolver.getImageExpireTime())
@@ -130,6 +145,7 @@ public class ImageStoreResponder implements HttpResponder {
                 this.errorResponse = HttpUtil.newResponse(BAD_REQUEST, "No image id.");
                 return;
             }
+
             if (!(idData instanceof Attribute)) {
                 this.errorResponse = HttpUtil.newResponse(BAD_REQUEST, "Can't resolve image id.");
                 return;

@@ -22,6 +22,8 @@ public class CeresFSConfiguration {
     private long volumeLimit; // default 16GB
     @Value("${ceresfs.image.maxSize:10485760}")
     private int imageMaxSize;
+    @Value("${ceresfs.image.existenceCheckEnabled:false}")
+    private boolean imageExistenceCheckEnabled;
 
     public int getPort() {
         return port;
@@ -53,6 +55,10 @@ public class CeresFSConfiguration {
 
     public int getImageMaxSize() {
         return imageMaxSize;
+    }
+
+    public boolean isImageExistenceCheckEnabled() {
+        return imageExistenceCheckEnabled;
     }
 }
 

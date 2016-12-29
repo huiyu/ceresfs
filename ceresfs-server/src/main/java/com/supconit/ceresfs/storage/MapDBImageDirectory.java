@@ -22,13 +22,18 @@ import java.util.Map;
 public class MapDBImageDirectory implements ImageDirectory, DisposableBean {
 
     private static final Logger LOG = LoggerFactory.getLogger(MapDBImageDirectory.class);
-    
+
     private static final String INDEX_FILE = ".metadata";
     private static final String MAP_INDEX = "index";
 
     private final FSTConfiguration fst = FSTConfiguration.createUnsafeBinaryConfiguration();
     private final Map<String, DB> dbByPath = new HashMap<>();
     private final Map<String, HTreeMap<Long, byte[]>> indexByPath = new HashMap<>();
+
+    @Override
+    public boolean contains(Disk disk, long id) {
+        return getOrCreate(disk).containsKey(id);
+    }
 
     @Override
     public Image.Index get(Disk disk, long id) {
@@ -38,6 +43,7 @@ public class MapDBImageDirectory implements ImageDirectory, DisposableBean {
         }
         return ((Image.Index) fst.asObject(data));
     }
+
 
     @Override
     public void save(Disk disk, Image.Index index) {

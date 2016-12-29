@@ -9,6 +9,8 @@ import com.supconit.ceresfs.topology.Disk;
  */
 public interface ImageDirectory {
 
+    boolean contains(Disk disk, long id);
+
     /**
      * Get image index
      *
