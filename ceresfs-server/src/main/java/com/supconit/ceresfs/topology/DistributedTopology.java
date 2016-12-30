@@ -1,12 +1,9 @@
 package com.supconit.ceresfs.topology;
 
-import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 
 import com.supconit.ceresfs.Configuration;
-import com.supconit.ceresfs.util.HashUtil;
 import com.supconit.ceresfs.util.NetUtil;
-import com.supconit.ceresfs.util.NumericUtil;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
@@ -29,9 +26,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 @Component
 @ConditionalOnProperty(prefix = "ceresfs", name = "mode", havingValue = "distributed", matchIfMissing = true)
@@ -41,16 +35,16 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
 
     private static final String ZK_BASE_PATH = "/ceresfs";
 
-    private FSTConfiguration fst = FSTConfiguration.createUnsafeBinaryConfiguration();
+    private final FSTConfiguration fst = FSTConfiguration.createUnsafeBinaryConfiguration();
+    private final Configuration configuration;
 
-    private final TreeMap<Long, Disk> hashCircle = new TreeMap<>();
+    private volatile Node localNode;
+    private volatile List<Node> allNodes;
 
-    private Node localNode;
-    private List<Node> allNodes;
-    private PersistentNode persistentNode;
-    private PathChildrenCache pathChildrenCache;
+    private volatile PersistentNode register;
+    private volatile PathChildrenCache watcher;
 
-    private Configuration configuration;
+    private volatile ConsistentHashingRouter router;
 
     @Autowired
     public DistributedTopology(Configuration configuration) {
@@ -74,17 +68,12 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
 
     @Override
     public Disk route(byte[] id) {
-        SortedMap<Long, Disk> tail = hashCircle.tailMap(HashUtil.murmur(id));
-        if (tail.size() == 0) {
-            return hashCircle.get(hashCircle.firstKey());
-        } else {
-            return tail.get(tail.firstKey());
-        }
+        return router.route(id);
     }
 
     @Override
     public Disk route(long id) {
-        return route(Longs.toByteArray(id));
+        return router.route(Longs.toByteArray(id));
     }
 
     @Override
@@ -125,18 +114,18 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         String path = ZKPaths.makePath(ZK_BASE_PATH, "nodes", String.valueOf(id));
         CuratorFramework client = configuration.getZookeeperClient();
         byte[] data = fst.asByteArray(node);
-        this.persistentNode = new PersistentNode(client, CreateMode.EPHEMERAL, false, path, data);
-        this.persistentNode.start();
+        this.register = new PersistentNode(client, CreateMode.EPHEMERAL, false, path, data);
+        this.register.start();
     }
 
     private void unregister() throws IOException {
-        persistentNode.close();
+        register.close();
     }
 
     private void startWatch() throws Exception {
         String path = ZKPaths.makePath(ZK_BASE_PATH, "nodes");
-        pathChildrenCache = new PathChildrenCache(configuration.getZookeeperClient(), path, false);
-        pathChildrenCache.getListenable().addListener((client, event) -> {
+        watcher = new PathChildrenCache(configuration.getZookeeperClient(), path, false);
+        watcher.getListenable().addListener((client, event) -> {
 
             List<Node> nodes = new ArrayList<>();
             for (String child : client.getChildren().forPath(path)) {
@@ -144,22 +133,9 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
                 byte[] data = client.getData().forPath(childPath);
                 nodes.add((Node) fst.asObject(data));
             }
-
-            Random random = new Random();
-            // create router
-            for (Node node : nodes) {
-                for (Disk disk : node.getDisks()) {
-                    int uniqueDiskId = NumericUtil.combineTwoShorts(node.getId(), disk.getId());
-                    random.setSeed(uniqueDiskId);
-
-                    int vnodeCount = (int) (disk.getWeight() * configuration.getVnodeFactor());
-                    for (int i = 0; i < vnodeCount; i++) {
-                        int vnodeId = random.nextInt();
-                        long uniqueVNodeId = NumericUtil.combineTwoInts(vnodeId, uniqueDiskId);
-                        hashCircle.put(uniqueVNodeId, disk);
-                    }
-                }
-            }
+            this.allNodes = nodes;
+            // build router
+            this.router = new ConsistentHashingRouter(nodes, configuration.getVnodeFactor());
 
             byte[] data = event.getData().getData();
             Node node = (Node) fst.asObject(data);
@@ -184,12 +160,11 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
                     break;
             }
         });
-        pathChildrenCache.start();
-
+        watcher.start();
     }
 
     private void stopWatch() throws IOException {
-        pathChildrenCache.close();
+        watcher.close();
     }
 
     private Node initLocalNode() throws IOException {
@@ -201,35 +176,6 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         node.setHostName(localHost.getHostName());
         return node;
     }
-
-    private Disk tryParseDisk(String key, String value) {
-        String prefix = "ceresfs.disk.";
-        if (!key.startsWith(prefix)) {
-            return null;
-        }
-        Short id = tryParseShort(key.substring(prefix.length()));
-        if (id == null) {
-            return null;
-        }
-        String[] pathAndWeight = value.split(":");
-
-        String path = pathAndWeight[0];
-        double weight = pathAndWeight.length > 1 ?
-                Double.parseDouble(pathAndWeight[1]) :
-                configuration.getDiskDefaultWeight();
-        return new Disk(id, path, weight);
-    }
-
-    private Short tryParseShort(String s) {
-        Integer integer = Ints.tryParse(s);
-        if (integer == null) {
-            return null;
-        }
-
-        // FIXME
-        return integer.shortValue();
-    }
-
 
     private InetAddress getLocalHostFromZK(String zkQuorum) throws IOException {
         Map<String, String> portByHost = parseMapProperties(zkQuorum, "2181");
