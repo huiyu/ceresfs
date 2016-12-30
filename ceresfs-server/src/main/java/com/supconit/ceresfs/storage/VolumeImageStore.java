@@ -4,7 +4,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 
-import com.supconit.ceresfs.CeresFSConfiguration;
+import com.supconit.ceresfs.Configuration;
 import com.supconit.ceresfs.EventHandler;
 import com.supconit.ceresfs.topology.Disk;
 
@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
@@ -50,7 +49,7 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
     }
 
     @Autowired
-    public VolumeImageStore(CeresFSConfiguration configuration) {
+    public VolumeImageStore(Configuration configuration) {
         this.volumeLimit = configuration.getVolumeLimit();
     }
 

@@ -25,9 +25,9 @@ public interface HttpResponder {
     /**
      * Handle http requests
      * 
-     * @param context
-     * @param request
+     * @param ctx
+     * @param req
      * @throws Exception
      */
-    void handle(ChannelHandlerContext context, FullHttpRequest request) throws Exception;
+    void handle(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception;
 }

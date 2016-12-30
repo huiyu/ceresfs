@@ -30,8 +30,6 @@ import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 @Component
 public class ImageQueryResponder implements HttpResponder {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ImageQueryResponder.class);
-
     private Topology topology;
     private ImageDirectory directory;
     private ImageStore store;

@@ -6,19 +6,28 @@ import java.util.Objects;
 
 public class Disk implements Serializable {
 
+    private short id;
     private String path;
     private double weight;
 
     private Node node;
 
-    private List<VNode> vnodes;
-
     public Disk() {
     }
 
-    public Disk(String path, double weight) {
+    public Disk(short id, String path, double weight) {
+        this.id = id;
         this.path = path;
         this.weight = weight;
+    }
+
+
+    public short getId() {
+        return id;
+    }
+
+    public void setId(short id) {
+        this.id = id;
     }
 
     public String getPath() {
@@ -43,27 +52,5 @@ public class Disk implements Serializable {
 
     public void setNode(Node node) {
         this.node = node;
-    }
-
-    public List<VNode> getVnodes() {
-        return vnodes;
-    }
-
-    public void setVnodes(List<VNode> vnodes) {
-        this.vnodes = vnodes;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Disk disk = (Disk) o;
-        return Objects.equals(path, disk.path) &&
-                Objects.equals(node, disk.node);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(path, node);
     }
 }

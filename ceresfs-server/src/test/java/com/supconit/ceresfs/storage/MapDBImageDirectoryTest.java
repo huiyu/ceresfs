@@ -19,7 +19,9 @@ public class MapDBImageDirectoryTest {
     @Test
     public void test() throws IOException {
         File path = folder.newFolder();
-        Disk disk = new Disk(path.getPath(), 1.0);
+        Disk disk = new Disk();
+        disk.setPath(path.getPath());
+        disk.setWeight(1.0);
         MapDBImageDirectory directory = new MapDBImageDirectory();
         Image.Index index = new Image.Index();
         index.setId(10001L);

@@ -20,7 +20,7 @@ public class ImageDeletionResponder implements HttpResponder {
     }
 
     @Override
-    public void handle(ChannelHandlerContext context, FullHttpRequest request) throws Exception {
+    public void handle(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
         // TODO
     }
 }

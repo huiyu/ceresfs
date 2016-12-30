@@ -6,6 +6,7 @@ import java.util.Objects;
 
 public class Node implements Serializable {
 
+    private short id;
     private String hostName;
     private String hostAddress;
     private int port;
@@ -44,18 +45,24 @@ public class Node implements Serializable {
         this.disks = disks;
     }
 
+    public void setId(short id) {
+        this.id = id;
+    }
+
+    public short getId() {
+        return id;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Node node = (Node) o;
-        return port == node.port &&
-                Objects.equals(hostName, node.hostName) &&
-                Objects.equals(hostAddress, node.hostAddress);
+        return id == node.id;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(hostName, hostAddress, port);
+        return Objects.hash(id);
     }
 }

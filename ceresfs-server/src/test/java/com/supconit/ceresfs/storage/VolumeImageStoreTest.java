@@ -32,7 +32,9 @@ public class VolumeImageStoreTest {
 
     @Test
     public void test() throws Exception {
-        Disk disk = new Disk(volumeDir.getPath(), 1.0);
+        Disk disk = new Disk();
+        disk.setPath(volumeDir.getPath());
+        disk.setWeight(1.0);
         VolumeImageStore store = new VolumeImageStore(SIZE_1MB);
 
         store.prepareSave(disk, 1L, Image.Type.JPG, new byte[(int) (SIZE_1MB / 2L)])

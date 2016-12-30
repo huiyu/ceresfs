@@ -1,6 +1,5 @@
 package com.supconit.ceresfs.http;
 
-import com.supconit.ceresfs.CeresFSConfiguration;
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.ImageDirectory;
 import com.supconit.ceresfs.storage.ImageStore;
@@ -46,18 +45,13 @@ public class ImageStoreResponder implements HttpResponder {
 
     private static final DefaultHttpDataFactory USE_MEMORY = new DefaultHttpDataFactory(false);
 
-    private final CeresFSConfiguration configuration;
     private final Topology topology;
     private final ImageDirectory directory;
     private final ImageStore store;
 
 
     @Autowired
-    public ImageStoreResponder(CeresFSConfiguration configuration,
-                               Topology topology,
-                               ImageDirectory directory,
-                               ImageStore store) {
-        this.configuration = configuration;
+    public ImageStoreResponder(Topology topology, ImageDirectory directory, ImageStore store) {
         this.topology = topology;
         this.directory = directory;
         this.store = store;
@@ -74,8 +68,8 @@ public class ImageStoreResponder implements HttpResponder {
     }
 
     @Override
-    public void handle(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
-        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(USE_MEMORY, request);
+    public void handle(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(USE_MEMORY, req);
         try {
             ImageStoreRequestResolver resolver = new ImageStoreRequestResolver(decoder);
             if (resolver.hasError()) {
@@ -96,7 +90,7 @@ public class ImageStoreResponder implements HttpResponder {
 
             if (!node.equals(topology.localNode())) { // redirect
                 HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
-                        .newCall(request.copy())
+                        .newCall(req.copy())
                         .onSuccess(r -> ctx.writeAndFlush(r.copy()))
                         .onError(e -> ctx.writeAndFlush(
                                 HttpUtil.newResponse(INTERNAL_SERVER_ERROR, e.getMessage())))
@@ -105,12 +99,10 @@ public class ImageStoreResponder implements HttpResponder {
             }
 
             // image id existence check
-            if (configuration.isImageExistenceCheckEnabled()) {
-                if (!directory.contains(disk, resolver.getImageId())) {
-                    ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST,
-                            "Image[id=" + resolver.getImageId() + "] already exist"));
-                    return;
-                }
+            if (!directory.contains(disk, resolver.getImageId())) {
+                ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST,
+                        "Image[id=" + resolver.getImageId() + "] already exist"));
+                return;
             }
 
             store.prepareSave(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
@@ -120,7 +112,7 @@ public class ImageStoreResponder implements HttpResponder {
                     .onError(error -> {
                         // TODO 
                     })
-                    .save(false);
+                    .save(resolver.isSync());
             ctx.writeAndFlush(HttpUtil.newResponse(OK, OK.reasonPhrase()));
         } finally {
             decoder.destroy();
@@ -251,6 +243,10 @@ public class ImageStoreResponder implements HttpResponder {
 
         public long getImageTime() {
             return imageTime;
+        }
+
+        public boolean isSync() {
+            return sync;
         }
     }
 }

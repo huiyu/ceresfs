@@ -1,5 +1,10 @@
 package com.supconit.ceresfs;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -11,11 +16,6 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 @Component
 public class CeresFSServer {
@@ -29,7 +29,7 @@ public class CeresFSServer {
     private final int aggregatorSize;
 
     @Autowired
-    public CeresFSServer(CeresFSConfiguration configuration, CeresFSServerHandler handler) {
+    public CeresFSServer(Configuration configuration, CeresFSServerHandler handler) {
         this.port = configuration.getPort();
         this.handler = handler;
         this.aggregatorSize = configuration.getImageMaxSize() + 1024 * 16;
