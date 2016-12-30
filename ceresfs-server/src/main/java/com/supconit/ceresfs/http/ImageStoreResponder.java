@@ -99,7 +99,7 @@ public class ImageStoreResponder implements HttpResponder {
             }
 
             // image id existence check
-            if (!directory.contains(disk, resolver.getImageId())) {
+            if (directory.contains(disk, resolver.getImageId())) {
                 ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST,
                         "Image[id=" + resolver.getImageId() + "] already exist"));
                 return;
