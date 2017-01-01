@@ -1,5 +1,7 @@
 package com.supconit.ceresfs;
 
+import com.supconit.ceresfs.config.Configuration;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +34,7 @@ public class CeresFSServer {
     public CeresFSServer(Configuration configuration, CeresFSServerHandler handler) {
         this.port = configuration.getPort();
         this.handler = handler;
-        this.aggregatorSize = configuration.getImageMaxSize() + 1024 * 16;
+        this.aggregatorSize = configuration.getImageMaxSize() + 8192;
     }
 
     public void start() throws InterruptedException {

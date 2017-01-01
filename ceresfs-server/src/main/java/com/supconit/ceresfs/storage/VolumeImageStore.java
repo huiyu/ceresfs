@@ -4,7 +4,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 
-import com.supconit.ceresfs.Configuration;
+import com.supconit.ceresfs.config.Configuration;
 import com.supconit.ceresfs.EventHandler;
 import com.supconit.ceresfs.topology.Disk;
 
@@ -50,7 +50,7 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
 
     @Autowired
     public VolumeImageStore(Configuration configuration) {
-        this.volumeLimit = configuration.getVolumeLimit();
+        this.volumeLimit = configuration.getVolumeMaxSize();
     }
 
     @Override

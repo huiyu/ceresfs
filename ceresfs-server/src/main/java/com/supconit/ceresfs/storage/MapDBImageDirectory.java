@@ -10,7 +10,7 @@ import org.nustaq.serialization.FSTConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
-@ConditionalOnClass(DB.class)
+@ConditionalOnProperty(prefix = "ceresfs", name = "directory.mode", havingValue = "mapdb", matchIfMissing = true)
 public class MapDBImageDirectory implements ImageDirectory, DisposableBean {
 
     private static final Logger LOG = LoggerFactory.getLogger(MapDBImageDirectory.class);

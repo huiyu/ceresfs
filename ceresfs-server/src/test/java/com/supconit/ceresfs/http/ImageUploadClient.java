@@ -2,10 +2,7 @@ package com.supconit.ceresfs.http;
 
 import com.supconit.ceresfs.storage.Image;
 
-import sun.security.jgss.LoginConfigImpl;
-
 import java.io.File;
-import java.util.HashMap;
 import java.util.Map;
 
 import io.netty.buffer.ByteBufAllocator;
@@ -42,17 +39,5 @@ public class ImageUploadClient {
 
     public void shutdown() {
         this.client.shutdown();
-    }
-
-    public static void main(String[] args) throws Exception {
-        String path = ImageUploadClient.class.getResource("/669006.png").getFile();
-        File file = new File(path);
-
-        ImageUploadClient client = new ImageUploadClient("localhost", 9900);
-        for (int i = 0; i < 1000; i++) {
-            Map<String, String> attributes = new HashMap<>();
-            attributes.put("id", String.valueOf(i));
-            client.upload("/image", file, Image.Type.PNG, attributes); 
-        }
     }
 }

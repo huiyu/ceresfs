@@ -56,6 +56,7 @@ public class VolumeFile {
             index.setType(Image.Type.parse(file.readByte()));
             index.setTime(file.readLong());
             index.setExpireTime(file.readLong());
+            index.setReplication(file.readByte());
             // skip padding
             file.skipBytes(18);
             // read image data
@@ -74,7 +75,7 @@ public class VolumeFile {
     public static class Writer implements Closeable {
 
         private static final byte[] PADDING = {
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         };
 
         private BufferedOutputStream out;
@@ -107,6 +108,7 @@ public class VolumeFile {
             buffer.put(index.getType().getCode());
             buffer.putLong(index.getTime());
             buffer.putLong(index.getExpireTime());
+            buffer.put(index.getReplication());
             buffer.put(PADDING);
             // put data
             buffer.put(data);

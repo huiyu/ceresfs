@@ -1,5 +1,6 @@
 package com.supconit.ceresfs.http;
 
+import com.sun.tools.doclets.formats.html.SourceToHTMLConverter;
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.ImageDirectory;
 import com.supconit.ceresfs.storage.ImageStore;
@@ -79,7 +80,9 @@ public class ImageQueryResponder implements HttpResponder {
                 return;
             }
 
+            long t1 = System.currentTimeMillis();
             Image.Index index = directory.get(disk, id);
+            long t2 = System.currentTimeMillis();
             if (index == null) {
                 // FIXME: maybe in store's buffer
                 ctx.writeAndFlush(HttpUtil.newResponse(NOT_FOUND, "Image[id=" + id + "] not found."));
@@ -87,6 +90,9 @@ public class ImageQueryResponder implements HttpResponder {
             }
             Image image = store.get(disk, index);
             String mimeType = image.getIndex().getType().getMimeType();
+            long t3 = System.currentTimeMillis();
+            System.out.println("Index: " + (t2 - t1));
+            System.out.println("Data: " + (t3 - t2));
             ctx.writeAndFlush(HttpUtil.newResponse(OK, mimeType, image.getData()));
         } catch (NumberFormatException e) {
             ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST, ids.get(0) + " can't cast to long."));

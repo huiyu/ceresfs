@@ -2,7 +2,7 @@ package com.supconit.ceresfs.topology;
 
 import com.google.common.primitives.Longs;
 
-import com.supconit.ceresfs.Configuration;
+import com.supconit.ceresfs.config.Configuration;
 import com.supconit.ceresfs.util.NetUtil;
 
 import org.apache.curator.framework.CuratorFramework;
@@ -128,37 +128,38 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         watcher.getListenable().addListener((client, event) -> {
 
             List<Node> nodes = new ArrayList<>();
-            for (String child : client.getChildren().forPath(path)) {
+            List<String> children = client.getChildren().forPath(path);
+            for (String child : children) {
                 String childPath = ZKPaths.makePath(path, child);
                 byte[] data = client.getData().forPath(childPath);
                 nodes.add((Node) fst.asObject(data));
             }
-            this.allNodes = nodes;
+            allNodes = nodes;
             // build router
-            this.router = new ConsistentHashingRouter(nodes, configuration.getVnodeFactor());
+            router = new ConsistentHashingRouter(nodes, configuration.getVnodeFactor());
 
-            byte[] data = event.getData().getData();
-            Node node = (Node) fst.asObject(data);
-            LOG.info("{} {}", node.toString(), event.getType().name());
-            switch (event.getType()) {
-                case CHILD_ADDED:
-                    break;
-                case CHILD_UPDATED:
-                    break;
-                case CHILD_REMOVED:
-                    break;
-                case CONNECTION_LOST:
-                    break;
-                case CONNECTION_SUSPENDED:
-                    break;
-                case CONNECTION_RECONNECTED:
-                    break;
-                case INITIALIZED:
-                    break;
-                default:
-                    // do nothing
-                    break;
-            }
+//            byte[] data = event.getData().getData();
+//            Node node = (Node) fst.asObject(data);
+//            LOG.info("{} {}", node.toString(), event.getType().name());
+//            switch (event.getType()) {
+//                case CHILD_ADDED:
+//                    break;
+//                case CHILD_UPDATED:
+//                    break;
+//                case CHILD_REMOVED:
+//                    break;
+//                case CONNECTION_LOST:
+//                    break;
+//                case CONNECTION_SUSPENDED:
+//                    break;
+//                case CONNECTION_RECONNECTED:
+//                    break;
+//                case INITIALIZED:
+//                    break;
+//                default:
+//                    // do nothing
+//                    break;
+//            }
         });
         watcher.start();
     }
@@ -171,7 +172,7 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         Node node = new Node();
         node.setId(configuration.getId());
         node.setPort(configuration.getPort());
-        InetAddress localHost = getLocalHostFromZK(configuration.getZookeeperQuorum());
+        InetAddress localHost = getLocalHostFromZK(configuration.getZookeeperAddress());
         node.setHostAddress(localHost.getHostAddress());
         node.setHostName(localHost.getHostName());
         return node;

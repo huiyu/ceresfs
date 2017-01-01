@@ -99,7 +99,7 @@ public class Image implements Serializable {
         }
     }
 
-    public static class Index implements Serializable { // total 46 byte
+    public static class Index implements Serializable { // total 47 byte
 
         // should never change this value.
         public static final int FIXED_LENGTH = 64;
@@ -113,6 +113,8 @@ public class Image implements Serializable {
 
         private long time; // 8 byte
         private long expireTime; // 8 byte
+        
+        private byte replication; // 1 byte
 
         public long getId() {
             return id;
@@ -178,24 +180,12 @@ public class Image implements Serializable {
             this.expireTime = expireTime;
         }
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Index index = (Index) o;
-            return id == index.id &&
-                    volume == index.volume &&
-                    flag == index.flag &&
-                    offset == index.offset &&
-                    size == index.size &&
-                    time == index.time &&
-                    expireTime == index.expireTime &&
-                    type == index.type;
+        public byte getReplication() {
+            return replication;
         }
 
-        @Override
-        public int hashCode() {
-            return Objects.hash(id, volume, flag, offset, size, type, time, expireTime);
+        public void setReplication(byte replication) {
+            this.replication = replication;
         }
 
         @Override
@@ -209,6 +199,7 @@ public class Image implements Serializable {
                     ", type=" + type +
                     ", time=" + time +
                     ", expireTime=" + expireTime +
+                    ", replication=" + replication +
                     '}';
         }
     }

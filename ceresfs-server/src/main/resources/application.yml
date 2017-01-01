@@ -3,7 +3,7 @@ ceresfs:
   port: 9900
   mode: distributed
   replication: 1
-  zookeeper-quorum: localhost:2181
+  zookeeper-address: localhost:2181
   image-max-size: 10485760
   volume-max-size: 17179869184
   disk-default-weight: 1
