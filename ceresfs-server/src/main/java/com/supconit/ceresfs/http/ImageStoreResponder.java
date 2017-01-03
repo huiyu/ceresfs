@@ -106,7 +106,6 @@ public class ImageStoreResponder implements HttpResponder {
             }
 
             store.prepareSave(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
-                    .setTime(resolver.getImageTime())
                     .setExpireTime(resolver.getImageExpireTime())
                     .onSuccess(image -> directory.save(disk, image.getIndex()))
                     .onError(error -> {
@@ -126,7 +125,6 @@ public class ImageStoreResponder implements HttpResponder {
         private long imageId;
         private Image.Type imageType;
         private long imageExpireTime;
-        private long imageTime;
         private boolean sync;
         private byte[] imageData;
 
@@ -172,24 +170,6 @@ public class ImageStoreResponder implements HttpResponder {
 
             ByteBuf byteBuf = fileUpload.getByteBuf();
             this.imageData = byteBuf.array();
-
-            // read time
-            InterfaceHttpData timeData = decoder.getBodyHttpData("time");
-            if (timeData == null) {
-                // default is current time
-                imageTime = System.currentTimeMillis();
-            } else {
-                try {
-                    String timeValue = ((Attribute) timeData).getValue();
-                    imageTime = Long.valueOf(timeValue);
-                } catch (NumberFormatException e) {
-                    this.errorResponse = HttpUtil.newResponse(
-                            BAD_REQUEST,
-                            "Time " + ((Attribute) timeData).getValue() + " is not unix time stamp.");
-                    return;
-                }
-
-            }
 
             // check expire time
             InterfaceHttpData expireTimeData = decoder.getBodyHttpData("expireTimeData");
@@ -239,10 +219,6 @@ public class ImageStoreResponder implements HttpResponder {
 
         public long getImageExpireTime() {
             return imageExpireTime;
-        }
-
-        public long getImageTime() {
-            return imageTime;
         }
 
         public boolean isSync() {
