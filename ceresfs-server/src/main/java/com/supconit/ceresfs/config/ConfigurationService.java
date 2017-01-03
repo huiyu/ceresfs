@@ -26,7 +26,8 @@ import java.util.List;
 public class ConfigurationService implements Configuration, InitializingBean, DisposableBean {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfigurationService.class);
-    private static final String ZK_CONF_PATH = "/ceresfs/configuration";
+    private static final String ZK_BASE_PATH = "/ceresfs";
+    private static final String ZK_CONF_PATH = ZK_BASE_PATH + "/configuration";
 
     private final FSTConfiguration fst = FSTConfiguration.createDefaultConfiguration();
 
@@ -113,11 +114,16 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
         createDisksIfNotExist();
     }
 
-    private void createZookeeperClient() {
+    private void createZookeeperClient() throws Exception {
         ExponentialBackoffRetry retryPolicy = new ExponentialBackoffRetry(200, 10);
         zookeeperClient = CuratorFrameworkFactory.newClient(
                 localConfig.getZookeeperAddress(), retryPolicy);
         zookeeperClient.start();
+        
+        // create base zookeeper path
+        if (zookeeperClient.checkExists().forPath(ZK_BASE_PATH) == null) {
+            zookeeperClient.create().forPath(ZK_BASE_PATH);
+        }
     }
 
     private void watchGlobalConfig() throws Exception {
