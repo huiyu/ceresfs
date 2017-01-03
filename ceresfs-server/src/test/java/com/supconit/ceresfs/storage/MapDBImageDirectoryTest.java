@@ -5,6 +5,7 @@ import com.supconit.ceresfs.topology.Disk;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.springframework.context.annotation.Import;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,15 +29,28 @@ public class MapDBImageDirectoryTest {
         index.setOffset(1L);
         directory.save(disk, index);
 
-        Image.Index get = directory.get(disk, 10001L);
-        assertEquals(get, index);
+        Image.Index actual = directory.get(disk, 10001L);
+        assertImageIndexEquals(index, actual);
 
+        // update
         index.setOffset(2L);
         directory.save(disk, index);
-        get = directory.get(disk, 10001L);
-        assertEquals(get, index);
+        actual = directory.get(disk, 10001L);
+        assertImageIndexEquals(index, actual);
 
         directory.delete(disk, 10001L);
         assertNull(directory.get(disk, 10001L));
+    }
+
+
+    private void assertImageIndexEquals(Image.Index expect, Image.Index actual) {
+        assertEquals(expect.getId(), actual.getId());
+        assertEquals(expect.getOffset(), actual.getOffset());
+        assertEquals(expect.getVolume(), actual.getVolume());
+        assertEquals(expect.getType(), actual.getType());
+        assertEquals(expect.getFlag(), actual.getFlag());
+        assertEquals(expect.getSize(), actual.getSize());
+        assertEquals(expect.getTime(), actual.getTime());
+        assertEquals(expect.getExpireTime(), actual.getExpireTime());
     }
 }
