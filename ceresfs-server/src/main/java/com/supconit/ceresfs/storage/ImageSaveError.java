@@ -1,7 +1,5 @@
 package com.supconit.ceresfs.storage;
 
-import com.supconit.ceresfs.storage.Image;
-
 public class ImageSaveError {
 
     private Image image;

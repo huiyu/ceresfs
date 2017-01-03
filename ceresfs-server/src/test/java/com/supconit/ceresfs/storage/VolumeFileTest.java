@@ -21,51 +21,55 @@ public class VolumeFileTest {
         folder.create();
     }
 
-
     @Test
-    public void testBasic() throws IOException {
-        long volumeFileName = System.currentTimeMillis();
-        File file = new File(folder.getRoot(), String.valueOf(volumeFileName));
-        long time = System.currentTimeMillis();
+    public void test() throws IOException {
+        long currentTime = System.currentTimeMillis();
+        File file = new File(folder.getRoot(), String.valueOf(currentTime));
+        // write
         try (VolumeFile.Writer writer = VolumeFile.createWriter(file)) {
             Image.Index index = new Image.Index();
-            index.setId(10001L);
-            index.setVolume(volumeFileName);
+            index.setId(1L);
             index.setFlag(Image.FLAG_NORMAL);
-            index.setOffset(0L);
-            index.setSize(100);
             index.setType(Image.Type.JPG);
-            index.setTime(time);
             index.setExpireTime(-1L);
             byte[] data = new byte[100];
             Image image = new Image(index, data);
             writer.write(image);
             writer.flush();
 
+            assertEquals(currentTime, index.getVolume());
+            assertEquals(0L, image.getIndex().getOffset());
+            assertTrue(image.getIndex().getTime() > currentTime);
+
+            image.getIndex().setId(2L);
             writer.write(image);
+            writer.flush();
+            assertEquals(currentTime, index.getVolume());
             assertEquals(164L, image.getIndex().getOffset());
+            assertTrue(image.getIndex().getTime() > currentTime);
         }
 
+        // read
         try (VolumeFile.Reader reader = VolumeFile.createReader(file)) {
-            Image image = reader.readImage();
-            Image.Index index = image.getIndex();
-            assertEquals(10001L, index.getId());
-            assertEquals(volumeFileName, index.getVolume());
-            assertEquals(Image.FLAG_NORMAL, index.getFlag());
-            assertEquals(0L, index.getOffset());
-            assertEquals(100, index.getSize());
-            assertEquals(Image.Type.JPG, index.getType());
-            assertEquals(time, index.getTime());
-            assertEquals(-1, index.getExpireTime());
+            Image image = reader.read(0);
+            assertEquals(1L, image.getIndex().getId());
             assertArrayEquals(new byte[100], image.getData());
+            image = reader.read(164);
+            assertEquals(2L, image.getIndex().getId());
+            assertArrayEquals(new byte[100], image.getData());
+        }
 
-            reader.seek(164);
-            image = reader.readImage();
-            assertNotNull(image);
-            
-            reader.seek(0L);
-            image = reader.readImage();
-            assertNotNull(image);
+        // iterate
+        try (VolumeFile.Reader reader = VolumeFile.createReader(file)) {
+            Image next;
+            int count = 0;
+            while ((next = reader.next()) != null) {
+                assertArrayEquals(new byte[100], next.getData());
+                assertEquals(-1L, next.getIndex().getExpireTime());
+                count++;
+            }
+            assertEquals(2, count);
         }
     }
 }
+    

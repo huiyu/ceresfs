@@ -10,7 +10,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 
 public class VolumeFile {
-    
+
     private final File file;
 
     public VolumeFile(File file) {
@@ -45,20 +45,31 @@ public class VolumeFile {
             file.seek(pos);
         }
 
-        public synchronized Image readImage() throws IOException {
+        public synchronized Image read(long pos) throws IOException {
+            seek(pos);
+            return next();
+        }
+
+        public synchronized Image next() throws IOException {
             // read index
+            
+            byte[] head = new byte[Image.Index.FIXED_LENGTH];
+            int bytesRead = file.read(head);
+            if (bytesRead < Image.Index.FIXED_LENGTH) {
+                return null;
+            }
+            
+            ByteBuffer buffer = ByteBuffer.wrap(head);
             Image.Index index = new Image.Index();
-            index.setId(file.readLong());
-            index.setVolume(file.readLong());
-            index.setFlag(file.readByte());
-            index.setOffset(file.readLong());
-            index.setSize(file.readInt());
-            index.setType(Image.Type.parse(file.readByte()));
-            index.setTime(file.readLong());
-            index.setExpireTime(file.readLong());
-            index.setReplication(file.readByte());
-            // skip padding
-            file.skipBytes(18);
+            index.setId(buffer.getLong());
+            index.setVolume(buffer.getLong());
+            index.setFlag(buffer.get());
+            index.setOffset(buffer.getLong());
+            index.setSize(buffer.getInt());
+            index.setType(Image.Type.parse(buffer.get()));
+            index.setTime(buffer.getLong());
+            index.setExpireTime(buffer.getLong());
+            index.setReplication(buffer.get());
             // read image data
             byte[] data = new byte[index.getSize()];
             file.read(data);
@@ -95,6 +106,12 @@ public class VolumeFile {
             // offset and total size
             index.setOffset(size);
             index.setSize(data.length);
+            index.setVolume(Long.valueOf(file.getName()));
+
+            // set time
+            index.setTime(System.currentTimeMillis());
+
+            // set volume file name
             index.setVolume(Long.valueOf(file.getName()));
 
             int capacity = 64 + image.getData().length;

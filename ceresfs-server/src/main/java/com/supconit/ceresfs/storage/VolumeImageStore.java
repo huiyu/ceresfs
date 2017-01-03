@@ -62,8 +62,7 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
         }
         File file = new File(disk.getPath(), String.valueOf(index.getVolume()));
         VolumeFile.Reader reader = getOrCreateReader(file);
-        reader.seek(index.getOffset());
-        image = reader.readImage();
+        image = reader.read(index.getOffset());
         return image;
     }
 
@@ -136,15 +135,8 @@ public class VolumeImageStore implements ImageStore, DisposableBean {
             index.setId(id);
             index.setType(type);
             index.setFlag(Image.FLAG_NORMAL);
-            index.setTime(System.currentTimeMillis());
             index.setExpireTime(-1L);
             this.image = new Image(index, data);
-        }
-
-        @Override
-        public ImageSaveTask setTime(long time) {
-            this.image.getIndex().setTime(time);
-            return this;
         }
 
         @Override

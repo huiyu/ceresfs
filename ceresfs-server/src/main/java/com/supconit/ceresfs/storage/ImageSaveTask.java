@@ -4,8 +4,6 @@ import com.supconit.ceresfs.EventHandler;
 
 public interface ImageSaveTask {
 
-    ImageSaveTask setTime(long time);
-
     ImageSaveTask setExpireTime(long expireTime);
 
     ImageSaveTask onSuccess(EventHandler<Image> handler);
