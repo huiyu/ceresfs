@@ -1,7 +1,6 @@
 ceresfs:
   id: 1
   port: 9900
-  mode: distributed
   replication: 1
   zookeeper-address: localhost:2181
   image-max-size: 10485760
