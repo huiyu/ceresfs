@@ -10,7 +10,6 @@ import com.supconit.ceresfs.util.HttpUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -46,13 +45,16 @@ public class ImageStoreResponder implements HttpResponder {
     private static final DefaultHttpDataFactory USE_MEMORY = new DefaultHttpDataFactory(false);
 
     private final Topology topology;
+    private final HttpClientPool httpClientPool;
     private final ImageDirectory directory;
     private final ImageStore store;
 
-
-    @Autowired
-    public ImageStoreResponder(Topology topology, ImageDirectory directory, ImageStore store) {
+    public ImageStoreResponder(Topology topology,
+                               HttpClientPool httpClientPool,
+                               ImageDirectory directory,
+                               ImageStore store) {
         this.topology = topology;
+        this.httpClientPool = httpClientPool;
         this.directory = directory;
         this.store = store;
     }
@@ -89,12 +91,14 @@ public class ImageStoreResponder implements HttpResponder {
             }
 
             if (!node.equals(topology.localNode())) { // redirect
-                HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
-                        .newCall(req.copy())
-                        .onSuccess(r -> ctx.writeAndFlush(r.copy()))
-                        .onError(e -> ctx.writeAndFlush(
-                                HttpUtil.newResponse(INTERNAL_SERVER_ERROR, e.getMessage())))
-                        .execute();
+                HttpClient client = httpClientPool.borrowObject(node);
+                client.newCall(req.copy()).whenComplete((res, ex) -> {
+                    httpClientPool.returnObject(node, client);
+                    HttpResponse response = ex != null ?
+                            res.copy() :
+                            HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex.getMessage());
+                    ctx.writeAndFlush(response);
+                });
                 return;
             }
 
@@ -105,14 +109,15 @@ public class ImageStoreResponder implements HttpResponder {
                 return;
             }
 
-            store.prepareSave(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
-                    .setExpireTime(resolver.getImageExpireTime())
-                    .onSuccess(image -> directory.save(disk, image.getIndex()))
-                    .onError(error -> {
-                        // TODO 
+            store.save(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
+                    .thenAccept(image -> {
+                        directory.save(disk, image.getIndex());
+                        ctx.writeAndFlush(HttpUtil.newResponse(OK, OK.reasonPhrase()));
                     })
-                    .save(resolver.isSync());
-            ctx.writeAndFlush(HttpUtil.newResponse(OK, OK.reasonPhrase()));
+                    .exceptionally(ex -> {
+                        ctx.writeAndFlush(HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex));
+                        return null;
+                    });
         } finally {
             decoder.destroy();
         }

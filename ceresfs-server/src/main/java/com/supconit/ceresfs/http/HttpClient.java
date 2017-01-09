@@ -1,10 +1,12 @@
 package com.supconit.ceresfs.http;
 
-import com.supconit.ceresfs.EventHandler;
+import com.supconit.ceresfs.CeresFS;
+import com.supconit.ceresfs.config.Configuration;
 import com.supconit.ceresfs.exception.CeresFSException;
 
 import org.springframework.util.Assert;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import io.netty.bootstrap.Bootstrap;
@@ -27,8 +29,6 @@ import io.netty.handler.codec.http.HttpResponseDecoder;
 
 public class HttpClient {
 
-    private static final int AGGREGATOR_BUFFER_SIZE = 512 * 1024;
-
     private final String host;
     private final int port;
 
@@ -42,6 +42,10 @@ public class HttpClient {
         this.clientHandler = new HttpClientHandler();
         this.workerGroup = new NioEventLoopGroup();
 
+        // aggregator buffer size must greater than the max image size
+        int aggregatorBufferSize = CeresFS.getContext().getBean(Configuration.class)
+                .getImageMaxSize() + 8192;
+
         try {
             Bootstrap b = new Bootstrap();
             b.group(workerGroup);
@@ -52,7 +56,7 @@ public class HttpClient {
                 public void initChannel(SocketChannel ch) throws Exception {
                     ch.pipeline().addLast(new HttpResponseDecoder());
                     ch.pipeline().addLast(new HttpRequestEncoder());
-                    ch.pipeline().addLast(new HttpObjectAggregator(AGGREGATOR_BUFFER_SIZE));
+                    ch.pipeline().addLast(new HttpObjectAggregator(aggregatorBufferSize));
                     ch.pipeline().addLast(clientHandler);
                 }
             });
@@ -65,8 +69,13 @@ public class HttpClient {
         }
     }
 
-    public HttpRequestBuilder newCall(HttpRequest request) {
-        return new HttpRequestBuilder(request, this);
+
+    public CompletableFuture<FullHttpResponse> newCall(HttpRequest request) {
+        CompletableFuture<FullHttpResponse> future = new CompletableFuture<>();
+        this.clientHandler.offer(future);
+        writeAndFlush(request);
+        return future;
+
     }
 
     public String getHost() {
@@ -86,80 +95,29 @@ public class HttpClient {
         channel.writeAndFlush(msg);
     }
 
-
-    public void putHandler(EventHandler<FullHttpResponse> responseHandler,
-                           EventHandler<Throwable> exceptionHandler) {
-        this.clientHandler.offer(responseHandler, exceptionHandler);
-    }
-
-    public static class HttpRequestBuilder {
-
-        private HttpRequest request;
-        private EventHandler<FullHttpResponse> onCompletion = r -> { }; // FIXME: do nothing?
-        private EventHandler<Throwable> onException = Throwable::printStackTrace;
-
-        private HttpClient client;
-
-        public HttpRequestBuilder(HttpRequest request, HttpClient client) {
-            this.request = request;
-            this.client = client;
-        }
-
-        public HttpRequestBuilder setHeader(String key, Object value) {
-            request.headers().set(key, value);
-            return this;
-        }
-
-        public HttpRequestBuilder setHeader(String key, Iterable<?> values) {
-            request.headers().set(key, values);
-            return this;
-        }
-
-        public HttpRequestBuilder onSuccess(EventHandler<FullHttpResponse> responseHandler) {
-            Assert.notNull(responseHandler);
-            this.onCompletion = responseHandler;
-            return this;
-        }
-
-        public HttpRequestBuilder onError(EventHandler<Throwable> exceptionHandler) {
-            Assert.notNull(exceptionHandler);
-            this.onException = exceptionHandler;
-            return this;
-        }
-
-        public void execute() {
-            client.putHandler(onCompletion, onException);
-            client.writeAndFlush(request);
-        }
-    }
-
     @ChannelHandler.Sharable
     static class HttpClientHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
 
-        private ConcurrentLinkedQueue<HttpEventHandler> queue = new ConcurrentLinkedQueue<>();
+        private ConcurrentLinkedQueue<CompletableFuture<FullHttpResponse>> queue = new ConcurrentLinkedQueue<>();
 
-        public void offer(EventHandler<FullHttpResponse> responseSubscriber,
-                          EventHandler<Throwable> exceptionHandler) {
-            this.queue.offer(new HttpEventHandler(responseSubscriber, exceptionHandler));
+        public void offer(CompletableFuture<FullHttpResponse> future) {
+            this.queue.offer(future);
         }
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-            HttpEventHandler httpEventHandler = queue.poll();
-            if (httpEventHandler == null) {
-                // TODO 
-                return;
-            }
-            try {
-                httpEventHandler.getResponseHandler().handle(msg);
-            } catch (Throwable e) {
-                httpEventHandler.getExceptionHandler().handle(e);
+
+            CompletableFuture<FullHttpResponse> future = queue.poll();
+            if (future == null) {
+                // TODO
+            } else {
+                future.complete(msg);
             }
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            queue.poll().getExceptionHandler().handle(cause);
+            queue.poll().completeExceptionally(cause);
         }
     }
 }

@@ -21,6 +21,6 @@ public class ImageDeletionResponder implements HttpResponder {
 
     @Override
     public void handle(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
-        // TODO
+        System.out.println(req);
     }
 }
