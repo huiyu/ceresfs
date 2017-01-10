@@ -30,17 +30,12 @@ import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 public class ImageQueryResponder implements HttpResponder {
 
     private Topology topology;
-    private HttpClientPool httpClientPool;
     private ImageDirectory directory;
     private ImageStore store;
 
     @Autowired
-    public ImageQueryResponder(Topology topology,
-                               HttpClientPool httpClientPool,
-                               ImageDirectory directory,
-                               ImageStore store) {
+    public ImageQueryResponder(Topology topology, ImageDirectory directory, ImageStore store) {
         this.topology = topology;
-        this.httpClientPool = httpClientPool;
         this.directory = directory;
         this.store = store;
     }
@@ -74,14 +69,14 @@ public class ImageQueryResponder implements HttpResponder {
             Disk disk = topology.route(id);
             Node node = disk.getNode();
             if (!node.equals(topology.localNode())) { // redirect
-                HttpClient client = httpClientPool.borrowObject(node);
-                client.newCall(req.copy()).whenComplete((res, ex) -> {
-                    httpClientPool.returnObject(node, client);
-                    HttpResponse response = ex == null ?
-                            HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex.getMessage()) :
-                            res.copy();
-                    ctx.writeAndFlush(response);
-                });
+                HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
+                        .newCall(req.copy())
+                        .whenComplete((res, ex) -> {
+                            HttpResponse response = ex == null ?
+                                    HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex.getMessage()) :
+                                    res.copy();
+                            ctx.writeAndFlush(response);
+                        });
                 return;
             }
 

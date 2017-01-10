@@ -58,11 +58,25 @@ public class Node implements Serializable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Node node = (Node) o;
-        return id == node.id;
+        return id == node.id &&
+                port == node.port &&
+                Objects.equals(hostName, node.hostName) &&
+                Objects.equals(hostAddress, node.hostAddress) &&
+                Objects.equals(disks, node.disks);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id);
+        return Objects.hash(id, hostName, hostAddress, port, disks);
+    }
+
+    @Override
+    public String toString() {
+        return "Node{" +
+                "id=" + id +
+                ", hostName='" + hostName + '\'' +
+                ", hostAddress='" + hostAddress + '\'' +
+                ", port=" + port +
+                '}';
     }
 }

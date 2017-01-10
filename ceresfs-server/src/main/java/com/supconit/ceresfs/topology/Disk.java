@@ -53,4 +53,28 @@ public class Disk implements Serializable {
     public void setNode(Node node) {
         this.node = node;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Disk disk = (Disk) o;
+        return id == disk.id &&
+                Double.compare(disk.weight, weight) == 0 &&
+                Objects.equals(path, disk.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, path, weight);
+    }
+
+    @Override
+    public String toString() {
+        return "Disk{" +
+                "id=" + id +
+                ", path='" + path + '\'' +
+                ", weight=" + weight +
+                '}';
+    }
 }

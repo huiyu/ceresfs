@@ -9,15 +9,18 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
+
+import static org.hamcrest.CoreMatchers.*;
 
 import static org.junit.Assert.*;
 
-public class ConsistentHashingRouterTest {
+public class ConsistentHashingTest {
 
     @Test
     public void testRouteDeterminacy() {
         List<Node> nodes = randomNodes(5);
-        ConsistentHashingRouter router = new ConsistentHashingRouter(nodes, 10000);
+        ConsistentHashing router = new ConsistentHashing(nodes, 10000);
 
         int[] expected = new int[100];
         for (int i = 0; i < expected.length; i++) {
@@ -29,7 +32,7 @@ public class ConsistentHashingRouterTest {
         // check 100 times make every time the router return exactly same disk
         for (int count = 0; count < 10; count++) {
             int[] actual = new int[expected.length];
-            router = new ConsistentHashingRouter(nodes, 10000);
+            router = new ConsistentHashing(nodes, 10000);
             for (int i = 0; i < actual.length; i++) {
                 Disk route = router.route(Longs.toByteArray(i));
                 int uniqueId = NumericUtil.combineTwoShorts(route.getId(), route.getNode().getId());
@@ -37,6 +40,36 @@ public class ConsistentHashingRouterTest {
             }
 
             assertArrayEquals(expected, actual);
+        }
+    }
+
+    @Test
+    public void testMultipleRouteDeterminacy() {
+        List<Node> nodes = randomNodes(1);
+        ConsistentHashing router = new ConsistentHashing(nodes, 10000);
+
+        for (int i = 0; i < 10; i++) {
+            List<Disk> disks = router.route(Longs.toByteArray(i), 1);
+            assertEquals(1, disks.size());
+            disks = router.route(Longs.toByteArray(i), (byte) 2);
+            assertEquals(1, disks.size());
+        }
+
+        nodes = randomNodes(100);
+        router = new ConsistentHashing(nodes, 10000);
+        for (int i = 0; i < 100; i++) {
+            List<Disk> disks = router.route(Longs.toByteArray(i), 3);
+            assertEquals(3, disks.size());
+            
+            assertNotEquals(disks.get(0).getNode().getId(), disks.get(1).getNode().getId());
+            assertNotEquals(disks.get(0).getNode().getId(), disks.get(2).getNode().getId());
+            assertNotEquals(disks.get(1).getNode().getId(), disks.get(2).getNode().getId());
+
+            List<Short> expected = disks.stream().map(Disk::getId).collect(Collectors.toList());
+
+            List<Short> actual = router.route(Longs.toByteArray(i), 3)
+                    .stream().map(Disk::getId).collect(Collectors.toList());
+            assertThat(actual, is(expected));
         }
     }
 
@@ -79,7 +112,7 @@ public class ConsistentHashingRouterTest {
             Node node = new Node();
             node.setId(i);
 
-            int diskNum = random.nextInt(5);
+            int diskNum = random.nextInt(5) + 1;
             List<Disk> disks = new ArrayList<>(diskNum);
             for (int j = 0; j < diskNum; j++) {
                 Disk disk = new Disk();

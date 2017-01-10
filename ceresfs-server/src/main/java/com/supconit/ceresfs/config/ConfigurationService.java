@@ -1,14 +1,13 @@
 package com.supconit.ceresfs.config;
 
 import com.supconit.ceresfs.CeresFS;
-import com.supconit.ceresfs.exception.CeresFSException;
 import com.supconit.ceresfs.topology.Disk;
+import com.supconit.ceresfs.util.Codec;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.recipes.cache.NodeCache;
 import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.nustaq.serialization.FSTConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -21,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @org.springframework.context.annotation.Configuration
 public class ConfigurationService implements Configuration, InitializingBean, DisposableBean {
@@ -28,8 +28,6 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
     private static final Logger LOG = LoggerFactory.getLogger(ConfigurationService.class);
     private static final String ZK_BASE_PATH = "/ceresfs";
     private static final String ZK_CONF_PATH = ZK_BASE_PATH + "/configuration";
-
-    private final FSTConfiguration fst = FSTConfiguration.createDefaultConfiguration();
 
     private volatile GlobalConfig globalConfig;
 
@@ -57,6 +55,22 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
     @Override
     public long getVolumeMaxSize() {
         return localConfig.getVolumeMaxSize();
+    }
+
+    @Override
+    public double getVolumeCompactThreshold() {
+        return localConfig.getVolumeCompactThreshold();
+    }
+
+    @Override
+    public long getVolumeCompactPeriod() {
+        return localConfig.getVolumeCompactPeriod();
+    }
+
+    @Override
+    public TimeUnit getVolumeCompactPeriodTimeUnit() {
+        String timeUnit = localConfig.getVolumeCompactPeriodTimeunit();
+        return TimeUnit.valueOf(timeUnit.toUpperCase());
     }
 
     @Override
@@ -90,7 +104,7 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
     }
 
     @Override
-    public void setReplication(byte replication) {
+    public void setReplication(byte replication) throws Exception {
         GlobalConfig globalConfig = this.globalConfig;
         globalConfig.setReplication(replication);
         checkAndWriteGlobalConfig(globalConfig);
@@ -119,7 +133,7 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
         zookeeperClient = CuratorFrameworkFactory.newClient(
                 localConfig.getZookeeperAddress(), retryPolicy);
         zookeeperClient.start();
-        
+
         // create base zookeeper path
         if (zookeeperClient.checkExists().forPath(ZK_BASE_PATH) == null) {
             zookeeperClient.create().forPath(ZK_BASE_PATH);
@@ -130,7 +144,7 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
         this.globalConfigWatcher = new NodeCache(getZookeeperClient(), ZK_CONF_PATH);
         this.globalConfigWatcher.getListenable().addListener(() -> {
             byte[] data = getZookeeperClient().getData().forPath(ZK_CONF_PATH);
-            GlobalConfig globalConfig = (GlobalConfig) fst.asObject(data);
+            GlobalConfig globalConfig = (GlobalConfig) Codec.decode(data);
             if (globalConfig.getReplication() != this.globalConfig.getReplication()) {
                 // TODO
                 this.globalConfig = globalConfig;
@@ -147,7 +161,7 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
             checkAndWriteGlobalConfig(globalConfig);
         } else {
             byte[] data = getZookeeperClient().getData().forPath(ZK_CONF_PATH);
-            this.globalConfig = (GlobalConfig) fst.asObject(data);
+            this.globalConfig = (GlobalConfig) Codec.decode(data);
             LOG.warn("{} is discarded because zookeeper already has one", globalConfig);
         }
     }
@@ -164,13 +178,9 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
         }
     }
 
-    private void checkAndWriteGlobalConfig(GlobalConfig globalConfig) {
-        try {
-            checkGlobalConfig(globalConfig);
-            getZookeeperClient().create().forPath(ZK_CONF_PATH, fst.asByteArray(globalConfig));
-        } catch (Exception e) {
-            throw new CeresFSException(e);
-        }
+    private void checkAndWriteGlobalConfig(GlobalConfig globalConfig) throws Exception {
+        checkGlobalConfig(globalConfig);
+        getZookeeperClient().create().forPath(ZK_CONF_PATH, Codec.encode(globalConfig));
     }
 
     private void checkGlobalConfig(GlobalConfig globalConfig) {
@@ -234,10 +244,12 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
     protected static class LocalConfig implements Serializable {
         private short id;
         private int port;
-        private String mode;
         private String zookeeperAddress;
         private double diskDefaultWeight;
         private long volumeMaxSize;
+        private double volumeCompactThreshold;
+        private String volumeCompactPeriodTimeunit;
+        private long volumeCompactPeriod;
         private int imageMaxSize;
         private List<Disk> disks;
 
@@ -255,14 +267,6 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
 
         public void setPort(int port) {
             this.port = port;
-        }
-
-        public String getMode() {
-            return mode;
-        }
-
-        public void setMode(String mode) {
-            this.mode = mode;
         }
 
         public String getZookeeperAddress() {
@@ -289,6 +293,30 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
             this.volumeMaxSize = volumeMaxSize;
         }
 
+        public double getVolumeCompactThreshold() {
+            return volumeCompactThreshold;
+        }
+
+        public void setVolumeCompactThreshold(double volumeCompactThreshold) {
+            this.volumeCompactThreshold = volumeCompactThreshold;
+        }
+
+        public String getVolumeCompactPeriodTimeunit() {
+            return volumeCompactPeriodTimeunit;
+        }
+
+        public void setVolumeCompactPeriodTimeunit(String volumeCompactPeriodTimeunit) {
+            this.volumeCompactPeriodTimeunit = volumeCompactPeriodTimeunit;
+        }
+
+        public long getVolumeCompactPeriod() {
+            return volumeCompactPeriod;
+        }
+
+        public void setVolumeCompactPeriod(long volumeCompactPeriod) {
+            this.volumeCompactPeriod = volumeCompactPeriod;
+        }
+
         public int getImageMaxSize() {
             return imageMaxSize;
         }
@@ -310,7 +338,6 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
             return "LocalConfig{" +
                     "id=" + id +
                     ", port=" + port +
-                    ", mode='" + mode + '\'' +
                     ", zookeeperAddress='" + zookeeperAddress + '\'' +
                     ", diskDefaultWeight=" + diskDefaultWeight +
                     ", volumeMaxSize=" + volumeMaxSize +

@@ -1,8 +1,9 @@
 package com.supconit.ceresfs.http;
 
+import com.google.common.util.concurrent.UncheckedExecutionException;
+
 import com.supconit.ceresfs.CeresFS;
 import com.supconit.ceresfs.config.Configuration;
-import com.supconit.ceresfs.exception.CeresFSException;
 
 import org.springframework.util.Assert;
 
@@ -65,7 +66,7 @@ public class HttpClient {
             ChannelFuture f = b.connect(host, port).sync();
             channel = f.channel();
         } catch (InterruptedException e) {
-            throw new CeresFSException(e);
+            throw new UncheckedExecutionException(e);
         }
     }
 
@@ -98,14 +99,16 @@ public class HttpClient {
     @ChannelHandler.Sharable
     static class HttpClientHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
 
-        private ConcurrentLinkedQueue<CompletableFuture<FullHttpResponse>> queue = new ConcurrentLinkedQueue<>();
+        private ConcurrentLinkedQueue<CompletableFuture<FullHttpResponse>> queue
+                = new ConcurrentLinkedQueue<>();
 
         public void offer(CompletableFuture<FullHttpResponse> future) {
             this.queue.offer(future);
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
+        protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg)
+                throws Exception {
 
             CompletableFuture<FullHttpResponse> future = queue.poll();
             if (future == null) {
@@ -116,7 +119,9 @@ public class HttpClient {
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+                throws Exception {
+            // FIXME NPE?
             queue.poll().completeExceptionally(cause);
         }
     }

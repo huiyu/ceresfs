@@ -5,6 +5,7 @@ import com.supconit.ceresfs.topology.Disk;
 import org.apache.curator.framework.CuratorFramework;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public interface Configuration {
 
@@ -15,7 +16,13 @@ public interface Configuration {
     double getDiskDefaultWeight();
 
     long getVolumeMaxSize();
-
+    
+    double getVolumeCompactThreshold();
+    
+    long getVolumeCompactPeriod();
+    
+    TimeUnit getVolumeCompactPeriodTimeUnit();
+    
     int getImageMaxSize();
 
     int getVnodeFactor();
@@ -28,5 +35,5 @@ public interface Configuration {
 
     byte getReplication();
 
-    void setReplication(byte replication);
+    void setReplication(byte replication) throws Exception;
 }

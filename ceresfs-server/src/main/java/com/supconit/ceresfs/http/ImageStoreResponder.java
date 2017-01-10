@@ -45,16 +45,11 @@ public class ImageStoreResponder implements HttpResponder {
     private static final DefaultHttpDataFactory USE_MEMORY = new DefaultHttpDataFactory(false);
 
     private final Topology topology;
-    private final HttpClientPool httpClientPool;
     private final ImageDirectory directory;
     private final ImageStore store;
 
-    public ImageStoreResponder(Topology topology,
-                               HttpClientPool httpClientPool,
-                               ImageDirectory directory,
-                               ImageStore store) {
+    public ImageStoreResponder(Topology topology, ImageDirectory directory, ImageStore store) {
         this.topology = topology;
-        this.httpClientPool = httpClientPool;
         this.directory = directory;
         this.store = store;
     }
@@ -91,14 +86,14 @@ public class ImageStoreResponder implements HttpResponder {
             }
 
             if (!node.equals(topology.localNode())) { // redirect
-                HttpClient client = httpClientPool.borrowObject(node);
-                client.newCall(req.copy()).whenComplete((res, ex) -> {
-                    httpClientPool.returnObject(node, client);
-                    HttpResponse response = ex != null ?
-                            res.copy() :
-                            HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex.getMessage());
-                    ctx.writeAndFlush(response);
-                });
+                HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
+                        .newCall(req.copy())
+                        .whenComplete((res, ex) -> {
+                            HttpResponse response = ex != null ?
+                                    res.copy() :
+                                    HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex.getMessage());
+                            ctx.writeAndFlush(response);
+                        });
                 return;
             }
 
@@ -109,7 +104,8 @@ public class ImageStoreResponder implements HttpResponder {
                 return;
             }
 
-            store.save(disk, resolver.getImageId(), resolver.getImageType(), resolver.getImageData())
+            store.save(disk, resolver.getImageId(), resolver.getImageType(),
+                    resolver.getImageData(), resolver.getImageExpireTime())
                     .thenAccept(image -> {
                         directory.save(disk, image.getIndex());
                         ctx.writeAndFlush(HttpUtil.newResponse(OK, OK.reasonPhrase()));
@@ -130,7 +126,6 @@ public class ImageStoreResponder implements HttpResponder {
         private long imageId;
         private Image.Type imageType;
         private long imageExpireTime;
-        private boolean sync;
         private byte[] imageData;
 
         public ImageStoreRequestResolver(HttpPostRequestDecoder decoder) throws IOException {
@@ -192,14 +187,6 @@ public class ImageStoreResponder implements HttpResponder {
                     return;
                 }
             }
-
-            // check sync
-            InterfaceHttpData syncData = decoder.getBodyHttpData("sync");
-            if (syncData != null && ((Attribute) syncData).getValue().equalsIgnoreCase("true")) {
-                sync = true;
-            } else {
-                sync = false;
-            }
         }
 
         public boolean hasError() {
@@ -224,10 +211,6 @@ public class ImageStoreResponder implements HttpResponder {
 
         public long getImageExpireTime() {
             return imageExpireTime;
-        }
-
-        public boolean isSync() {
-            return sync;
         }
     }
 }

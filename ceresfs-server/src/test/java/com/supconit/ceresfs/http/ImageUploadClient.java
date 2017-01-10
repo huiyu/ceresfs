@@ -34,7 +34,7 @@ public class ImageUploadClient {
         while ((content = encoder.readChunk((ByteBufAllocator) null)) != null) {
             request.content().writeBytes(content.content());
         }
-        client.newCall(request).execute();
+        client.newCall(request);
     }
 
     public void shutdown() {

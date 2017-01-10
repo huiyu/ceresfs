@@ -1,12 +1,12 @@
 package com.supconit.ceresfs.storage;
 
 import com.supconit.ceresfs.topology.Disk;
+import com.supconit.ceresfs.util.Codec;
 
 import org.mapdb.DB;
 import org.mapdb.DBMaker;
 import org.mapdb.HTreeMap;
 import org.mapdb.Serializer;
-import org.nustaq.serialization.FSTConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -26,7 +26,6 @@ public class MapDBImageDirectory implements ImageDirectory, DisposableBean {
     private static final String INDEX_FILE = ".metadata";
     private static final String MAP_INDEX = "index";
 
-    private final FSTConfiguration fst = FSTConfiguration.createUnsafeBinaryConfiguration();
     private final Map<String, DB> dbByPath = new HashMap<>();
     private final Map<String, HTreeMap<Long, byte[]>> indexByPath = new HashMap<>();
 
@@ -41,7 +40,7 @@ public class MapDBImageDirectory implements ImageDirectory, DisposableBean {
         if (data == null) {
             return null;
         }
-        return ((Image.Index) fst.asObject(data));
+        return ((Image.Index) Codec.decode(data));
     }
 
 
@@ -49,7 +48,7 @@ public class MapDBImageDirectory implements ImageDirectory, DisposableBean {
     public void save(Disk disk, Image.Index index) {
         HTreeMap<Long, byte[]> indexMap = getOrCreate(disk);
         // do save index
-        byte[] data = fst.asByteArray(index);
+        byte[] data = Codec.encode(index);
         indexMap.put(index.getId(), data);
     }
 
