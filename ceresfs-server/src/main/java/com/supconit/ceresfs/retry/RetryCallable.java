@@ -1,8 +1,13 @@
 package com.supconit.ceresfs.retry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.Callable;
 
 public class RetryCallable<T> implements Callable<T> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RetryCallable.class);
 
     private final Callable<T> task;
     private final RetryStrategy strategy;
@@ -20,7 +25,7 @@ public class RetryCallable<T> implements Callable<T> {
             while (strategy.allowRetry()) try {
                 return task.call();
             } catch (Exception ex) {
-                ex.printStackTrace();
+                LOG.error("Retry " + task + " error", e);
             }
             throw e;
         }

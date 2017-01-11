@@ -1,8 +1,13 @@
 package com.supconit.ceresfs.retry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.function.Supplier;
 
 public class RetrySupplier<T> implements Supplier<T> {
+    
+    private static final Logger LOG = LoggerFactory.getLogger(RetrySupplier.class);
 
     private final Supplier<T> task;
     private final RetryStrategy strategy;
@@ -20,7 +25,7 @@ public class RetrySupplier<T> implements Supplier<T> {
             while (strategy.allowRetry()) try {
                 return task.get();
             } catch (Exception ex) {
-                ex.printStackTrace();
+                LOG.error("Retry " + task + " error", e);
             }
             throw e;
         }
