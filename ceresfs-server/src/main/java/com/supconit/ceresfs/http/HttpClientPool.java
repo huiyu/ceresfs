@@ -4,6 +4,7 @@ package com.supconit.ceresfs.http;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -28,7 +30,7 @@ public class HttpClientPool implements DisposableBean {
             .concurrencyLevel(4)
             .build();
 
-    public static HttpClient getOrCreate(String host, int port) throws IOException {
+    public static HttpClient getOrCreate(String host, int port) {
         try {
             String key = host + ":" + port;
             return CACHE.get(key, () -> {
@@ -37,9 +39,10 @@ public class HttpClientPool implements DisposableBean {
             });
         } catch (ExecutionException e) {
             if (e.getCause() != null && e.getCause() instanceof IOException) {
-                throw new IOException();
+                IOException cause = (IOException) e.getCause();
+                throw new UncheckedIOException(cause);
             }
-            throw new IOException(e);
+            throw new UncheckedExecutionException(e);
         }
     }
 

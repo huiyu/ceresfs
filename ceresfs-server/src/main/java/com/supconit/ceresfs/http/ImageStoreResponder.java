@@ -1,5 +1,7 @@
 package com.supconit.ceresfs.http;
 
+import com.google.common.util.concurrent.UncheckedExecutionException;
+
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.ImageDirectory;
 import com.supconit.ceresfs.storage.ImageStore;
@@ -13,10 +15,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.multipart.Attribute;
@@ -32,7 +36,7 @@ import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERR
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
 @Component
-public class ImageStoreResponder implements HttpResponder {
+public class ImageStoreResponder extends AbstractAsynchronousHttpResponder {
 
     static {
         // delete file on exist (normal exist)
@@ -65,55 +69,50 @@ public class ImageStoreResponder implements HttpResponder {
     }
 
     @Override
-    public void handle(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
+    protected CompletableFuture<FullHttpResponse> getResponse(FullHttpRequest req) {
         HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(USE_MEMORY, req);
         try {
             ImageStoreRequestResolver resolver = new ImageStoreRequestResolver(decoder);
             if (resolver.hasError()) {
-                ctx.writeAndFlush(resolver.getErrorResponse());
-                return;
+                return CompletableFuture.completedFuture(resolver.getErrorResponse());
             }
 
             Disk disk = topology.route(resolver.getImageId());
             Node node = disk.getNode();
 
             if (LOG.isTraceEnabled()) {
-                LOG.trace("Image {} route to {}:{}:{}",
-                        resolver.getImageId(),
-                        node.getHostAddress(),
-                        node.getPort(),
-                        disk.getPath());
+                LOG.trace("Image {} route to {}:{}:{}", resolver.getImageId(),
+                        node.getHostAddress(), node.getPort(), disk.getPath());
             }
 
-            if (!node.equals(topology.localNode())) { // redirect
-                HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
-                        .newCall(req.copy())
-                        .whenComplete((res, ex) -> {
-                            HttpResponse response = ex != null ?
-                                    res.copy() :
-                                    HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex.getMessage());
-                            ctx.writeAndFlush(response);
-                        });
-                return;
+            if (!node.equals(topology.localNode())) { // forward
+                return forward(node, req);
             }
 
             // image id existence check
             if (directory.contains(disk, resolver.getImageId())) {
-                ctx.writeAndFlush(HttpUtil.newResponse(BAD_REQUEST,
-                        "Image[id=" + resolver.getImageId() + "] already exist"));
-                return;
+                FullHttpResponse resp = HttpUtil.newResponse(BAD_REQUEST,
+                        "Image[id=" + resolver.getImageId() + "] already exist");
+                return CompletableFuture.completedFuture(resp);
             }
 
-            store.save(disk, resolver.getImageId(), resolver.getImageType(),
-                    resolver.getImageData(), resolver.getImageExpireTime())
-                    .thenAccept(image -> {
-                        directory.save(disk, image.getIndex());
-                        ctx.writeAndFlush(HttpUtil.newResponse(OK, OK.reasonPhrase()));
-                    })
-                    .exceptionally(ex -> {
-                        ctx.writeAndFlush(HttpUtil.newResponse(INTERNAL_SERVER_ERROR, ex));
-                        return null;
-                    });
+            return store.save(
+                    disk,
+                    resolver.getImageId(),
+                    resolver.getImageType(),
+                    resolver.getImageData(),
+                    resolver.getImageExpireTime()
+            ).handle((image, ex) -> {
+                if (ex != null) {
+                    throw new UncheckedExecutionException(ex);
+                }
+                directory.save(disk, image.getIndex());
+                return HttpUtil.newResponse(OK);
+            });
+        } catch (Exception e) {
+            CompletableFuture<FullHttpResponse> future = new CompletableFuture<>();
+            future.completeExceptionally(e);
+            return future;
         } finally {
             decoder.destroy();
         }
@@ -121,7 +120,7 @@ public class ImageStoreResponder implements HttpResponder {
 
     private static class ImageStoreRequestResolver {
 
-        private HttpResponse errorResponse;
+        private FullHttpResponse errorResponse;
 
         private long imageId;
         private Image.Type imageType;
@@ -156,7 +155,8 @@ public class ImageStoreResponder implements HttpResponder {
                 return;
             }
             if (!(fileData instanceof FileUpload)) {
-                this.errorResponse = HttpUtil.newResponse(BAD_REQUEST, "Not multipart/form-data request.");
+                this.errorResponse = HttpUtil.newResponse(BAD_REQUEST,
+                        "Not multipart/form-data request.");
                 return;
             }
             FileUpload fileUpload = (FileUpload) fileData;
@@ -183,7 +183,8 @@ public class ImageStoreResponder implements HttpResponder {
                 } catch (NumberFormatException e) {
                     this.errorResponse = HttpUtil.newResponse(
                             BAD_REQUEST,
-                            "Expire time " + ((Attribute) expireTimeData).getValue() + " is not unix time stamp.");
+                            "Expire time " + ((Attribute) expireTimeData).getValue()
+                                    + " is not unix time stamp.");
                     return;
                 }
             }
@@ -193,7 +194,7 @@ public class ImageStoreResponder implements HttpResponder {
             return errorResponse != null;
         }
 
-        public HttpResponse getErrorResponse() {
+        public FullHttpResponse getErrorResponse() {
             return errorResponse;
         }
 
