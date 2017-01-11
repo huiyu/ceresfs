@@ -26,7 +26,7 @@ import static io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
 @Component
-public class ImageQueryResponder extends AbstractAsynchronousHttpResponder {
+public class ImageQueryResponder extends AbstractAsyncHttpResponder {
 
     private Topology topology;
     private ImageDirectory directory;

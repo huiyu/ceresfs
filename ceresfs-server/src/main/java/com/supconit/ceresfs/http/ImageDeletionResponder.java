@@ -27,7 +27,7 @@ import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
 @Component
-public class ImageDeletionResponder extends AbstractAsynchronousHttpResponder {
+public class ImageDeletionResponder extends AbstractAsyncHttpResponder {
 
     private static final Logger LOG = LoggerFactory.getLogger(ImageDeletionResponder.class);
 
