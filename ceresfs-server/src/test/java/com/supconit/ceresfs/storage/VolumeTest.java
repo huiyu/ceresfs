@@ -17,7 +17,7 @@ public class VolumeTest {
 
 
     @Before
-    public void setup() throws IOException {
+    public void setUp() throws IOException {
         folder.create();
     }
 
