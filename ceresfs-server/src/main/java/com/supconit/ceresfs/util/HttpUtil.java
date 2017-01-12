@@ -19,7 +19,9 @@ public class HttpUtil {
     private static final String MIME_PLAIN = "text/plain;";
 
     public static FullHttpResponse newResponse(HttpResponseStatus status) {
-        return new DefaultFullHttpResponse(VERSION, status);
+        DefaultFullHttpResponse response = new DefaultFullHttpResponse(VERSION, status);
+        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
+        return response;
     }
 
     public static FullHttpResponse newResponse(HttpResponseStatus status, String message) {

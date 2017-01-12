@@ -15,7 +15,7 @@ import static io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
 
 public abstract class AbstractAsyncHttpResponder implements HttpResponder {
 
-    public static final String MSG_FORWARD_FORBIDDEN = "Request forward is not allowed";
+    protected static final String MSG_FORWARD_FORBIDDEN = "Request forward is not allowed";
 
     @Override
     public void handle(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
