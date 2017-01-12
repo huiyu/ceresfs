@@ -15,6 +15,9 @@ import org.springframework.util.CollectionUtils;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -22,6 +25,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
+import static io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
 import static io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
@@ -76,11 +80,10 @@ public class ImageQueryResponder extends AbstractAsyncHttpResponder {
             }
 
             Image.Index index = directory.get(disk, id);
-            if (index == null) {
-                FullHttpResponse resp = HttpUtil.newResponse(
-                        NOT_FOUND, "Image[id=" + id + "] not found.");
-                return CompletableFuture.completedFuture(resp);
-            }
+            
+            if (index == null)
+                return broadcast(req);
+
             Image image = store.get(disk, index);
             String mimeType = image.getIndex().getType().getMimeType();
             FullHttpResponse resp = HttpUtil.newResponse(OK, mimeType, image.getData());
@@ -95,4 +98,59 @@ public class ImageQueryResponder extends AbstractAsyncHttpResponder {
             return future;
         }
     }
+
+    protected CompletableFuture<FullHttpResponse> broadcast(FullHttpRequest req) {
+        int maxForwardOf = maxForwardOf(req, 1);
+        if (maxForwardOf <= 0) {
+            FullHttpResponse resp = HttpUtil.newResponse(FORBIDDEN, MSG_FORWARD_FORBIDDEN);
+            return CompletableFuture.completedFuture(resp);
+        }
+
+        final List<Node> nodes = topology.allNodes();
+        if (nodes.size() < 2) {
+            return CompletableFuture.completedFuture(HttpUtil.newResponse(NOT_FOUND));
+        }
+
+        // do broadcast
+        final Node localNode = topology.localNode();
+        final ForkJoinPool pool = ForkJoinPool.commonPool();
+        return CompletableFuture.supplyAsync(() -> {
+            final AtomicReference<FullHttpResponse> ref = new AtomicReference<>();
+            final CountDownLatch completeOne = new CountDownLatch(1);
+            pool.submit(() -> {
+                final CountDownLatch completeAll = new CountDownLatch(nodes.size() - 1);
+                for (Node node : nodes) {
+                    if (!node.equals(localNode)) {
+                        try {
+                            CompletableFuture<FullHttpResponse> forward = forward(node, req);
+                            FullHttpResponse response = forward.get();
+                            ref.set(response);
+                            completeOne.countDown();
+                        } catch (Exception e) {
+                        } finally {
+                            completeAll.countDown();
+                        }
+                    }
+                }
+                try {
+                    completeAll.await();
+                } catch (InterruptedException e) {
+                } finally {
+                    completeOne.countDown();
+                }
+            });
+
+            try {
+                completeOne.await();
+            } catch (InterruptedException e) {
+            }
+
+            FullHttpResponse response = ref.get();
+            if (response == null) {
+                response = HttpUtil.newResponse(NOT_FOUND);
+            }
+            return response;
+        });
+    }
+
 }
