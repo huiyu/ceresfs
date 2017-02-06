@@ -20,6 +20,8 @@ import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -29,125 +31,66 @@ import java.util.stream.Stream;
 @Component
 public class PooledVolumeContainer implements VolumeContainer {
 
+    // 5 minute rule
+    private static final int EXPIRE_TIME = 5;
+    private static final TimeUnit EXPIRE_TIME_UNIT = TimeUnit.SECONDS;
+
     private static final Logger LOG = LoggerFactory.getLogger(PooledVolumeContainer.class);
-    private final Cache<String, Volume.Writer> writerByPath = CacheBuilder.newBuilder()
-            .expireAfterAccess(5, TimeUnit.MINUTES)
-            .concurrencyLevel(4)
-            .removalListener((RemovalListener<String, Volume.Writer>) notification -> {
-                try {
-                    LOG.debug("Close volume writer [{}] ", notification.getKey());
-                    notification.getValue().close();
-                } catch (IOException e) {
-                    LOG.error("Close volume writer [" + notification.getKey() + "] error.", e);
-                }
-            })
-            .build();
-    private final Cache<String, Volume.Reader> readerByPath = CacheBuilder.newBuilder()
-            .expireAfterAccess(5, TimeUnit.MINUTES)
-            .concurrencyLevel(4)
-            .removalListener((RemovalListener<String, Volume.Reader>) notification -> {
-                try {
-                    LOG.debug("Close volume reader [{}] ", notification.getKey());
-                    notification.getValue().close();
-                } catch (IOException e) {
-                    LOG.error("Close volume reader [" + notification.getKey() + "] error.", e);
-                }
-            })
-            .build();
-    private final Cache<String, Volume.Updater> updaterByPath = CacheBuilder.newBuilder()
-            .expireAfterAccess(5, TimeUnit.MINUTES)
-            .concurrencyLevel(4)
-            .removalListener((RemovalListener<String, Volume.Updater>) notification -> {
-                try {
-                    LOG.debug("Close volume updater [{}] ", notification.getKey());
-                    notification.getValue().close();
-                } catch (IOException e) {
-                    LOG.error("Close volume updater [" + notification.getKey() + "] error.", e);
-                }
-            })
-            .build();
-    // 1 volume per disk
-    // TODO allow multiple volumes?
-    private final Map<String, Volume.Writer> appendableWriterByDisk = new HashMap<>();
+
     private final Configuration config;
-    private Map<String, Volume> volumeByPath = new ConcurrentHashMap<>();
+    private final Map<String, Volume> volumeByPath = new ConcurrentHashMap<>();
+
+    protected CommonPool<Volume.Writer> writerPool;
+    protected CommonPool<Volume.Reader> readerPool;
+    protected CommonPool<Volume.Updater> updaterPool;
+    protected ActiveWriterPool activeWriterPool;
 
     @Autowired
     public PooledVolumeContainer(Configuration config) {
         this.config = config;
+        // TODO change config
+        this.writerPool = new CommonPool<>(EXPIRE_TIME, EXPIRE_TIME_UNIT);
+        this.readerPool = new CommonPool<>(EXPIRE_TIME, EXPIRE_TIME_UNIT);
+        this.updaterPool = new CommonPool<>(EXPIRE_TIME, EXPIRE_TIME_UNIT);
+        this.activeWriterPool = new ActiveWriterPool(config.getVolumeWriteParallelism(), config.getVolumeMaxSize());
+    }
+
+    private static void closeSilently(Closeable closeable) {
+        try {
+            closeable.close();
+        } catch (IOException e) {
+            LOG.error("Close " + closeable + " error ", e);
+        }
     }
 
     @Override
     public Volume getVolume(File volume) {
         Assert.notNull(volume);
-        Assert.isTrue(volume.exists());
+        Assert.isTrue(volume.exists(), "Volume " + volume.getName() + " is not exists");
         return volumeByPath.getOrDefault(volume.getAbsolutePath(), new Volume(volume));
     }
 
-
     @Override
-    public Volume.Writer getAppendableWriter(String disk) {
-        Volume.Writer writer = appendableWriterByDisk.get(disk);
-        if (writer == null || writer.length() >= config.getVolumeMaxSize()) {
-            synchronized (appendableWriterByDisk) {
-                try {
-                    if (writer == null) {
-                        writer = newVolumeWriter(disk);
-                    } else if (writer.length() >= config.getVolumeMaxSize()) {
-                        writer.close();
-                        writer = newVolumeWriter(disk);
-                    }
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-        }
-        return writer;
-    }
-
-    private Volume.Writer newVolumeWriter(String diskPath) throws IOException {
-        File file = new File(diskPath, String.valueOf(System.currentTimeMillis()));
-        if (file.exists()) {
-            return newVolumeWriter(diskPath);
-        } else {
-            if (!file.createNewFile()) {
-                throw new IOException("Create new file " + file.getName() + " error");
-            }
-            Volume volume = new Volume(file);
-            Volume.Writer writer = Volume.createWriter(volume);
-            appendableWriterByDisk.put(diskPath, writer);
-            return writer;
-        }
+    public Volume.Writer getActiveWriter(String disk) {
+        return activeWriterPool.get(disk);
     }
 
     @Override
     public Volume.Writer getWriter(File volume) {
-        try {
-            return writerByPath.get(volume.getAbsolutePath(), () ->
-                    Volume.createWriter(getVolume(volume)));
-        } catch (ExecutionException e) {
-            throw new UncheckedExecutionException(e);
-        }
+        return writerPool.computeIfAbsent(volume.getAbsolutePath(),
+                () -> Volume.createWriter(getVolume(volume)));
     }
 
     @Override
     public Volume.Reader getReader(File volume) {
-        try {
-            return readerByPath.get(volume.getAbsolutePath(), () ->
-                    Volume.createReader(getVolume(volume)));
-        } catch (ExecutionException e) {
-            throw new UncheckedExecutionException(e);
-        }
+        return readerPool.computeIfAbsent(volume.getAbsolutePath(),
+                () -> Volume.createReader(getVolume(volume)));
     }
 
     @Override
     public Volume.Updater getUpdater(File volume) {
-        try {
-            return updaterByPath.get(volume.getAbsolutePath(), () ->
-                    Volume.createUpdater(getVolume(volume)));
-        } catch (ExecutionException e) {
-            throw new UncheckedExecutionException(e);
-        }
+        return updaterPool.computeIfAbsent(volume.getAbsolutePath(),
+                () -> Volume.createUpdater(getVolume(volume)));
     }
 
     @Override
@@ -159,68 +102,161 @@ public class PooledVolumeContainer implements VolumeContainer {
         return Stream.of(files).map(this::getVolume).collect(Collectors.toList());
     }
 
-
     @Override
-    public void disableVolume(File volume) {
+    public void closeVolume(File volume) {
         // close reader , writer and updater
         // assert volume is fully locked
         Assert.isTrue(volume.exists());
         volumeByPath.remove(volume.getAbsolutePath());
-        disableWriter(volume);
-        disableReader(volume);
-        disableUpdater(volume);
+        closeWriter(volume);
+        closeReader(volume);
+        closeUpdater(volume);
     }
 
     @Override
-    public void disableWriter(File volume) {
-        String disk = volume.getParent();
-        synchronized (appendableWriterByDisk) {
-            Volume.Writer appendableWriter = appendableWriterByDisk.get(disk);
-            if (appendableWriter != null) {
-                appendableWriterByDisk.remove(disk);
-                closeSilently(appendableWriter);
-            }
-        }
-
-        String key = volume.getAbsolutePath();
-        Volume.Writer writer = writerByPath.getIfPresent(key);
-        if (writer != null) {
-            writerByPath.invalidate(key);
-        }
+    public void closeWriter(File volume) {
+        activeWriterPool.disable(volume);
+        writerPool.close(volume.getAbsolutePath());
     }
 
     @Override
-    public void disableReader(File volume) {
-        String key = volume.getAbsolutePath();
-        Volume.Reader reader = readerByPath.getIfPresent(key);
-        if (reader != null) {
-            readerByPath.invalidate(key);
-        }
+    public void closeReader(File volume) {
+        readerPool.close(volume.getAbsolutePath());
     }
 
     @Override
-    public void disableUpdater(File volume) {
-        String key = volume.getAbsolutePath();
-        Volume.Updater updater = updaterByPath.getIfPresent(key);
-        if (updater != null) {
-            updaterByPath.invalidate(updater);
-        }
+    public void closeUpdater(File volume) {
+        updaterPool.close(volume.getAbsolutePath());
     }
 
     @Override
     public void deleteVolume(File volume) {
-        disableVolume(volume);
+        closeVolume(volume);
         boolean delete = volume.delete();
         if (!delete) {
             throw new UncheckedIOException(new IOException("File " + volume + " delete failed"));
         }
     }
 
-    private void closeSilently(Closeable closeable) {
-        try {
-            closeable.close();
-        } catch (IOException e) {
-            LOG.error("Close " + closeable + " error ", e);
+    /**
+     * Common pool based on guava cache
+     */
+    public static final class CommonPool<E extends Closeable> implements Closeable {
+
+        final Cache<String, E> cache;
+
+        public CommonPool(long expireTime, TimeUnit expireTimeUnit) {
+            this.cache = CacheBuilder.newBuilder()
+                    .expireAfterAccess(expireTime, expireTimeUnit)
+                    .concurrencyLevel(4)
+                    .removalListener((RemovalListener<String, E>) notification -> {
+                        try {
+                            LOG.debug("Close {} ", notification.getKey());
+                            notification.getValue().close();
+                        } catch (IOException e) {
+                            LOG.error("Close " + notification.getKey() + " error.", e);
+                        }
+                    })
+                    .build();
+        }
+
+        public E computeIfAbsent(String key, Callable<E> valueLoader) {
+            try {
+                return cache.get(key, valueLoader);
+            } catch (ExecutionException e) {
+                throw new UncheckedExecutionException(e);
+            }
+        }
+
+        public void close(String key) {
+            cache.invalidate(key);
+        }
+
+        @Override
+        public void close() throws IOException {
+            cache.invalidateAll();
+        }
+    }
+
+    /**
+     * Active writer pool
+     */
+    public static final class ActiveWriterPool implements Closeable {
+
+        final int size;
+        final long maxVolumeSize;
+        final Map<String, Volume.Writer[]> writersByDisk;
+        final Random random = new Random(47);
+
+        public ActiveWriterPool(int size, long maxVolumeSize) {
+            this.size = size;
+            this.maxVolumeSize = maxVolumeSize;
+            this.writersByDisk = new HashMap<>();
+        }
+
+        public synchronized Volume.Writer get(String disk) {
+            Volume.Writer[] writers = writersByDisk.get(disk);
+            if (writers == null) {
+                writers = new Volume.Writer[size];
+                for (int i = 0; i < size; i++) {
+                    Volume.Writer writer = newWriter(disk);
+                    writers[i] = writer;
+                }
+                writersByDisk.put(disk, writers);
+            }
+
+            int next = random.nextInt(size);
+            Volume.Writer writer = writers[next];
+            if (writer.length() > maxVolumeSize) {
+                writer = newWriter(disk);
+                writers[next] = writer;
+            }
+            return writer;
+        }
+
+        public synchronized void disable(File volume) {
+            String disk = volume.getParent();
+
+            Volume.Writer[] writers = writersByDisk.get(disk);
+            if (writers == null)
+                return;
+
+            for (int i = 0; i < writers.length; i++) {
+                Volume.Writer w = writers[i];
+                if (w.getVolume().getFile().equals(volume)) {
+                    closeSilently(w);
+                    w = newWriter(disk);
+                    writers[i] = w;
+                    break;
+                }
+            }
+        }
+
+        private Volume.Writer newWriter(String disk) {
+            try {
+                File file = new File(disk, String.valueOf(System.currentTimeMillis()));
+                if (file.exists()) {
+                    return newWriter(disk);
+                } else {
+                    if (!file.createNewFile()) {
+                        throw new IOException("Create new file " + file.getName() + " error");
+                    }
+                    Volume volume = new Volume(file);
+                    Volume.Writer writer = Volume.createWriter(volume);
+                    return writer;
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            for (Volume.Writer[] writers : writersByDisk.values()) {
+                for (Volume.Writer writer : writers) {
+                    closeSilently(writer);
+                }
+            }
         }
     }
 }

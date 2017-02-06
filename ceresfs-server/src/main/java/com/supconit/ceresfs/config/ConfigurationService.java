@@ -1,8 +1,7 @@
 package com.supconit.ceresfs.config;
 
-import com.supconit.ceresfs.CeresFS;
+import com.supconit.ceresfs.Const;
 import com.supconit.ceresfs.topology.Disk;
-import com.supconit.ceresfs.util.Codec;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -19,6 +18,7 @@ import org.springframework.context.annotation.Bean;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -26,9 +26,8 @@ import java.util.concurrent.TimeUnit;
 public class ConfigurationService implements Configuration, InitializingBean, DisposableBean {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfigurationService.class);
-    private static final String ZK_BASE_PATH = "/ceresfs";
-    private static final String ZK_CONF_PATH = ZK_BASE_PATH + "/configuration";
 
+    @Autowired
     private volatile GlobalConfig globalConfig;
 
     private CuratorFramework zookeeperClient;
@@ -55,6 +54,11 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
     @Override
     public long getVolumeMaxSize() {
         return localConfig.getVolumeMaxSize();
+    }
+
+    @Override
+    public int getVolumeWriteParallelism() {
+        return localConfig.getVolumeWriteParallelism();
     }
 
     @Override
@@ -111,6 +115,16 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
     }
 
     @Override
+    public long getBalanceDelay() {
+        return localConfig.getBalanceDelay();
+    }
+
+    @Override
+    public TimeUnit getBalanceDelayTimeUnit() {
+        return TimeUnit.valueOf(localConfig.getBalanceDelayTimeunit().toUpperCase());
+    }
+
+    @Override
     public void afterPropertiesSet() throws Exception {
         // create and start zookeeper client
         createZookeeperClient();
@@ -135,33 +149,28 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
         zookeeperClient.start();
 
         // create base zookeeper path
-        if (zookeeperClient.checkExists().forPath(ZK_BASE_PATH) == null) {
-            zookeeperClient.create().forPath(ZK_BASE_PATH);
+        if (zookeeperClient.checkExists().forPath(Const.ZK_BASE_PATH) == null) {
+            zookeeperClient.create().forPath(Const.ZK_BASE_PATH);
         }
     }
 
     private void watchGlobalConfig() throws Exception {
-        this.globalConfigWatcher = new NodeCache(getZookeeperClient(), ZK_CONF_PATH);
+        this.globalConfigWatcher = new NodeCache(getZookeeperClient(), Const.ZK_CONFIG_PATH);
         this.globalConfigWatcher.getListenable().addListener(() -> {
-            byte[] data = getZookeeperClient().getData().forPath(ZK_CONF_PATH);
-            GlobalConfig globalConfig = (GlobalConfig) Codec.decode(data);
-            if (globalConfig.getReplication() != this.globalConfig.getReplication()) {
-                // TODO
-                this.globalConfig = globalConfig;
-            }
+            byte[] data = getZookeeperClient().getData().forPath(Const.ZK_CONFIG_PATH);
+            globalConfig.fromBytes(data);
+            // TODO do something after global config changed
         });
         this.globalConfigWatcher.start();
     }
 
     private void writeGlobalConfigIfNotExist() throws Exception {
         CuratorFramework client = this.getZookeeperClient();
-        GlobalConfig globalConfig = CeresFS.getContext().getBean(GlobalConfig.class);
-        if (client.checkExists().forPath(ZK_CONF_PATH) == null) {
-            this.globalConfig = globalConfig;
+        if (client.checkExists().forPath(Const.ZK_CONFIG_PATH) == null) {
             checkAndWriteGlobalConfig(globalConfig);
         } else {
-            byte[] data = getZookeeperClient().getData().forPath(ZK_CONF_PATH);
-            this.globalConfig = (GlobalConfig) Codec.decode(data);
+            byte[] data = getZookeeperClient().getData().forPath(Const.ZK_CONFIG_PATH);
+            globalConfig.fromBytes(data);
             LOG.warn("{} is discarded because zookeeper already has one", globalConfig);
         }
     }
@@ -180,7 +189,8 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
 
     private void checkAndWriteGlobalConfig(GlobalConfig globalConfig) throws Exception {
         checkGlobalConfig(globalConfig);
-        getZookeeperClient().create().forPath(ZK_CONF_PATH, Codec.encode(globalConfig));
+        CuratorFramework client = getZookeeperClient();
+        client.create().forPath(Const.ZK_CONFIG_PATH, globalConfig.toBytes());
     }
 
     private void checkGlobalConfig(GlobalConfig globalConfig) {
@@ -231,6 +241,16 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
             this.vnodeFactor = vnodeFactor;
         }
 
+        protected byte[] toBytes() {
+            return ByteBuffer.allocate(5).put(replication).putInt(vnodeFactor).array();
+        }
+
+        protected void fromBytes(byte[] bytes) {
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            setReplication(buffer.get());
+            setVnodeFactor(buffer.getInt());
+        }
+
         @Override
         public String toString() {
             return "GlobalConfig{" +
@@ -247,11 +267,15 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
         private String zookeeperAddress;
         private double diskDefaultWeight;
         private long volumeMaxSize;
+        private int volumeWriteParallelism;
         private double volumeCompactThreshold;
         private String volumeCompactPeriodTimeunit;
         private long volumeCompactPeriod;
         private int imageMaxSize;
         private List<Disk> disks;
+
+        private long balanceDelay;
+        private String balanceDelayTimeunit;
 
         public short getId() {
             return id;
@@ -291,6 +315,14 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
 
         public void setVolumeMaxSize(long volumeMaxSize) {
             this.volumeMaxSize = volumeMaxSize;
+        }
+
+        public int getVolumeWriteParallelism() {
+            return volumeWriteParallelism;
+        }
+
+        public void setVolumeWriteParallelism(int volumeWriteParallelism) {
+            this.volumeWriteParallelism = volumeWriteParallelism;
         }
 
         public double getVolumeCompactThreshold() {
@@ -333,6 +365,23 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
             this.disks = disks;
         }
 
+
+        public long getBalanceDelay() {
+            return balanceDelay;
+        }
+
+        public void setBalanceDelay(long balanceDelay) {
+            this.balanceDelay = balanceDelay;
+        }
+
+        public String getBalanceDelayTimeunit() {
+            return balanceDelayTimeunit;
+        }
+
+        public void setBalanceDelayTimeunit(String balanceDelayTimeunit) {
+            this.balanceDelayTimeunit = balanceDelayTimeunit;
+        }
+
         @Override
         public String toString() {
             return "LocalConfig{" +
@@ -341,8 +390,13 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
                     ", zookeeperAddress='" + zookeeperAddress + '\'' +
                     ", diskDefaultWeight=" + diskDefaultWeight +
                     ", volumeMaxSize=" + volumeMaxSize +
+                    ", volumeCompactThreshold=" + volumeCompactThreshold +
+                    ", volumeCompactPeriodTimeunit='" + volumeCompactPeriodTimeunit + '\'' +
+                    ", volumeCompactPeriod=" + volumeCompactPeriod +
                     ", imageMaxSize=" + imageMaxSize +
                     ", disks=" + disks +
+                    ", balanceDelay=" + balanceDelay +
+                    ", balanceDelayTimeunit='" + balanceDelayTimeunit + '\'' +
                     '}';
         }
     }

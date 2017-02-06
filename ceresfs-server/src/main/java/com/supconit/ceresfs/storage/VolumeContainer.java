@@ -12,7 +12,7 @@ public interface VolumeContainer {
 
     Volume getVolume(File volume);
 
-    Volume.Writer getAppendableWriter(String disk);
+    Volume.Writer getActiveWriter(String disk);
 
     Volume.Writer getWriter(File volume);
 
@@ -22,13 +22,13 @@ public interface VolumeContainer {
 
     List<Volume> getAllVolumes(String disk);
 
-    void disableVolume(File volume);
+    void closeVolume(File volume);
 
-    void disableWriter(File volume);
+    void closeWriter(File volume);
 
-    void disableReader(File volume);
+    void closeReader(File volume);
 
-    void disableUpdater(File volume);
+    void closeUpdater(File volume);
 
     void deleteVolume(File volume);
 }

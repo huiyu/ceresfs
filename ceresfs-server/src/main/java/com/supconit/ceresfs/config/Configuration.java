@@ -17,6 +17,8 @@ public interface Configuration {
 
     long getVolumeMaxSize();
     
+    int getVolumeWriteParallelism();
+    
     double getVolumeCompactThreshold();
     
     long getVolumeCompactPeriod();
@@ -36,4 +38,8 @@ public interface Configuration {
     byte getReplication();
 
     void setReplication(byte replication) throws Exception;
+    
+    long getBalanceDelay();
+    
+    TimeUnit getBalanceDelayTimeUnit();
 }
