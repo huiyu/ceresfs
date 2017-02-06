@@ -1,8 +1,8 @@
 package com.supconit.ceresfs.http;
 
 import com.supconit.ceresfs.storage.Image;
-import com.supconit.ceresfs.storage.ImageDirectory;
-import com.supconit.ceresfs.storage.ImageStore;
+import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.topology.Disk;
 import com.supconit.ceresfs.topology.Node;
 import com.supconit.ceresfs.topology.Topology;
@@ -12,12 +12,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicReference;
 
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -25,7 +24,6 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
-import static io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
 import static io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
@@ -33,11 +31,11 @@ import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 public class ImageQueryResponder extends AbstractAsyncHttpResponder {
 
     private Topology topology;
-    private ImageDirectory directory;
-    private ImageStore store;
+    private Directory directory;
+    private Store store;
 
     @Autowired
-    public ImageQueryResponder(Topology topology, ImageDirectory directory, ImageStore store) {
+    public ImageQueryResponder(Topology topology, Directory directory, Store store) {
         this.topology = topology;
         this.directory = directory;
         this.store = store;
@@ -71,23 +69,48 @@ public class ImageQueryResponder extends AbstractAsyncHttpResponder {
 
         try {
             long id = Long.valueOf(ids.get(0));
+
             Disk disk = topology.route(id);
             Node node = disk.getNode();
 
-            // forward
-            if (!node.equals(topology.localNode())) {
-                return forward(node, req);
+            List<Node> unbalancedNodes = topology.getUnbalancedNodes();
+            if (unbalancedNodes.isEmpty()) {
+                
+//                if (!node.equals(topology.getLocalNode())) {
+                if (topology.isLocalNode(node)) {
+                    return forward(node, req);
+                }
+
+                Image.Index index = directory.get(disk, id);
+                if (index == null) {
+                    return CompletableFuture.completedFuture(HttpUtil.newResponse(NOT_FOUND));
+                }
+                Image image = store.get(disk, index);
+                String mimeType = image.getIndex().getType().getMimeType();
+                FullHttpResponse resp = HttpUtil.newResponse(OK, mimeType, image.getData());
+                return CompletableFuture.completedFuture(resp);
+            } else if (!topology.getLocalNode().isBalanced()) {
+                // full scan disks
+                for (Disk d : topology.getLocalNode().getDisks()) {
+                    Image.Index index = directory.get(d, id);
+                    if (index != null) {
+                        Image image = store.get(d, index);
+                        String mimeType = image.getIndex().getType().getMimeType();
+                        FullHttpResponse resp = HttpUtil.newResponse(OK, mimeType, image.getData());
+                        return CompletableFuture.completedFuture(resp);
+                    }
+                }
             }
 
-            Image.Index index = directory.get(disk, id);
-            
-            if (index == null)
-                return broadcast(req);
-
-            Image image = store.get(disk, index);
-            String mimeType = image.getIndex().getType().getMimeType();
-            FullHttpResponse resp = HttpUtil.newResponse(OK, mimeType, image.getData());
-            return CompletableFuture.completedFuture(resp);
+            Set<Node> nodes = new HashSet<>(unbalancedNodes);
+            nodes.remove(topology.getLocalNode());
+            if (nodes.isEmpty()) {
+                return CompletableFuture.completedFuture(HttpUtil.newResponse(NOT_FOUND));
+            } else if (nodes.size() == 1) {
+                return forward(node, req);
+            } else {
+                return broadcast(nodes, req);
+            }
         } catch (NumberFormatException e) {
             FullHttpResponse resp = HttpUtil.newResponse(
                     BAD_REQUEST, ids.get(0) + " can't cast to long.");
@@ -98,59 +121,4 @@ public class ImageQueryResponder extends AbstractAsyncHttpResponder {
             return future;
         }
     }
-
-    protected CompletableFuture<FullHttpResponse> broadcast(FullHttpRequest req) {
-        int maxForwardOf = maxForwardOf(req, 1);
-        if (maxForwardOf <= 0) {
-            FullHttpResponse resp = HttpUtil.newResponse(FORBIDDEN, MSG_FORWARD_FORBIDDEN);
-            return CompletableFuture.completedFuture(resp);
-        }
-
-        final List<Node> nodes = topology.allNodes();
-        if (nodes.size() < 2) {
-            return CompletableFuture.completedFuture(HttpUtil.newResponse(NOT_FOUND));
-        }
-
-        // do broadcast
-        final Node localNode = topology.localNode();
-        final ForkJoinPool pool = ForkJoinPool.commonPool();
-        return CompletableFuture.supplyAsync(() -> {
-            final AtomicReference<FullHttpResponse> ref = new AtomicReference<>();
-            final CountDownLatch completeOne = new CountDownLatch(1);
-            pool.submit(() -> {
-                final CountDownLatch completeAll = new CountDownLatch(nodes.size() - 1);
-                for (Node node : nodes) {
-                    if (!node.equals(localNode)) {
-                        try {
-                            CompletableFuture<FullHttpResponse> forward = forward(node, req);
-                            FullHttpResponse response = forward.get();
-                            ref.set(response);
-                            completeOne.countDown();
-                        } catch (Exception e) {
-                        } finally {
-                            completeAll.countDown();
-                        }
-                    }
-                }
-                try {
-                    completeAll.await();
-                } catch (InterruptedException e) {
-                } finally {
-                    completeOne.countDown();
-                }
-            });
-
-            try {
-                completeOne.await();
-            } catch (InterruptedException e) {
-            }
-
-            FullHttpResponse response = ref.get();
-            if (response == null) {
-                response = HttpUtil.newResponse(NOT_FOUND);
-            }
-            return response;
-        });
-    }
-
 }

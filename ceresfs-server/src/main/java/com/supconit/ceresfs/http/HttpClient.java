@@ -142,6 +142,7 @@ public class HttpClient {
         protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg)
                 throws Exception {
             String id = msg.headers().get("id");
+
             if (id == null) {
                 InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
                 LOG.error("No response handler for message from ", address.getHostString());
@@ -150,7 +151,7 @@ public class HttpClient {
             CompletableFuture<FullHttpResponse> future = callbacks.getIfPresent(id);
             if (future != null) {
                 callbacks.invalidate(id);
-                future.complete(msg);
+                future.complete(msg.copy());
             } else {
                 InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
                 LOG.error("No response handler for message from ", address.getHostString());

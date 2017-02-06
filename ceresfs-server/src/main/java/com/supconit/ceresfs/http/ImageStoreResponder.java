@@ -3,8 +3,8 @@ package com.supconit.ceresfs.http;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 
 import com.supconit.ceresfs.storage.Image;
-import com.supconit.ceresfs.storage.ImageDirectory;
-import com.supconit.ceresfs.storage.ImageStore;
+import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.topology.Disk;
 import com.supconit.ceresfs.topology.Node;
 import com.supconit.ceresfs.topology.Topology;
@@ -46,10 +46,10 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
     private static final DefaultHttpDataFactory USE_MEMORY = new DefaultHttpDataFactory(false);
 
     private final Topology topology;
-    private final ImageDirectory directory;
-    private final ImageStore store;
+    private final Directory directory;
+    private final Store store;
 
-    public ImageStoreResponder(Topology topology, ImageDirectory directory, ImageStore store) {
+    public ImageStoreResponder(Topology topology, Directory directory, Store store) {
         this.topology = topology;
         this.directory = directory;
         this.store = store;
@@ -82,7 +82,8 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
                         node.getHostAddress(), node.getPort(), disk.getPath());
             }
 
-            if (!node.equals(topology.localNode())) { // forward
+//            if (!node.equals(topology.getLocalNode())) { // forward
+            if (topology.isLocalNode(node)) {
                 return forward(node, req);
             }
 

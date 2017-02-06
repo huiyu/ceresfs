@@ -1,8 +1,8 @@
 package com.supconit.ceresfs.http;
 
 import com.supconit.ceresfs.storage.Image;
-import com.supconit.ceresfs.storage.ImageDirectory;
-import com.supconit.ceresfs.storage.ImageStore;
+import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.topology.Disk;
 import com.supconit.ceresfs.topology.Node;
 import com.supconit.ceresfs.topology.Topology;
@@ -34,11 +34,11 @@ public class ImageDeletionResponder extends AbstractAsyncHttpResponder {
     private static final DefaultHttpDataFactory USE_MEMORY = new DefaultHttpDataFactory(false);
 
     private final Topology topology;
-    private final ImageDirectory directory;
-    private final ImageStore store;
+    private final Directory directory;
+    private final Store store;
 
     @Autowired
-    public ImageDeletionResponder(Topology topology, ImageDirectory directory, ImageStore store) {
+    public ImageDeletionResponder(Topology topology, Directory directory, Store store) {
         this.topology = topology;
         this.directory = directory;
         this.store = store;
@@ -77,7 +77,7 @@ public class ImageDeletionResponder extends AbstractAsyncHttpResponder {
                 Disk disk = this.topology.route(id);
                 Node node = disk.getNode();
 
-                if (!node.equals(topology.localNode())) {
+                if (topology.isLocalNode(node)) {
                     return forward(node, req);
                 }
 

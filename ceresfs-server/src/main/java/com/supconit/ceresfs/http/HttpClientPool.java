@@ -8,16 +8,13 @@ import com.google.common.util.concurrent.UncheckedExecutionException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-@Component
-public class HttpClientPool implements DisposableBean {
+public class HttpClientPool {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpClientPool.class);
 
@@ -44,11 +41,6 @@ public class HttpClientPool implements DisposableBean {
             }
             throw new UncheckedExecutionException(e);
         }
-    }
-
-    @Override
-    public void destroy() throws Exception {
-        CACHE.cleanUp();
     }
 }
 
