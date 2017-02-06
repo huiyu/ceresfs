@@ -110,6 +110,10 @@ public class Volume {
             }
         }
 
+        public Volume getVolume() {
+            return volume;
+        }
+
         public boolean isClosed() {
             return closed;
         }
@@ -213,6 +217,10 @@ public class Volume {
             }
         }
 
+        public Volume getVolume() {
+            return volume;
+        }
+
         public long length() {
             return size;
         }
@@ -262,6 +270,10 @@ public class Volume {
             } finally {
                 lock.unlock();
             }
+        }
+
+        public Volume getVolume() {
+            return volume;
         }
 
         public boolean isClosed() {
