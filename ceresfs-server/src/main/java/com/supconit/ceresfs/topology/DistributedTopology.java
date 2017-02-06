@@ -3,23 +3,24 @@ package com.supconit.ceresfs.topology;
 import com.google.common.primitives.Longs;
 
 import com.supconit.ceresfs.config.Configuration;
+import com.supconit.ceresfs.storage.Balancer;
+import com.supconit.ceresfs.storage.DelayedBalancer;
+import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.util.Codec;
 import com.supconit.ceresfs.util.NetUtil;
 
 import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.recipes.cache.PathChildrenCache;
 import org.apache.curator.framework.recipes.nodes.PersistentNode;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.Shell;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanInstantiationException;
-import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
@@ -29,37 +30,57 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
-public class DistributedTopology implements Topology, InitializingBean, DisposableBean, ApplicationContextAware {
+public class DistributedTopology implements Topology, InitializingBean, DisposableBean {
 
     private static final Logger LOG = LoggerFactory.getLogger(DistributedTopology.class);
 
     private static final String ZK_BASE_PATH = "/ceresfs";
 
-    private final List<TopologyChangeListener> topologyChangeListeners = new ArrayList<>();
-
-    private final Configuration configuration;
-
     private volatile Node localNode;
-    private volatile List<Node> allNodes;
     private volatile PersistentNode register;
-    private volatile PathChildrenCache watcher;
-    private volatile ConsistentHashing router;
+
+    private ListenableRouter router;
+
+    private volatile Map<Short, Node> unbalanced;
+
+    private final Configuration config;
+    private final Balancer balancer;
+
+
+    public DistributedTopology(Configuration config, Balancer balancer) {
+        this.config = config;
+        this.balancer = balancer;
+    }
 
     @Autowired
-    public DistributedTopology(Configuration configuration) {
-        this.configuration = configuration;
+    public DistributedTopology(Configuration config, Directory directory, Store store) {
+        this.config = config;
+        this.balancer = new DelayedBalancer(this, directory, store);
     }
 
     @Override
-    public Node localNode() {
+    public Node getLocalNode() {
         return localNode;
     }
 
     @Override
-    public List<Node> allNodes() {
-        return allNodes;
+    public boolean isLocalNode(Node node) {
+        return localNode.getId() == node.getId();
+    }
+
+    @Override
+    public List<Node> getAllNodes() {
+        return router.getNodes();
+    }
+
+    @Override
+    public List<Node> getUnbalancedNodes() {
+        return new ArrayList<>(unbalanced.values());
     }
 
     @Override
@@ -72,9 +93,36 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         return router.route(Longs.toByteArray(id));
     }
 
+    public void startBalancer() {
+        if (balancer.isRunning()) stopBalancer();
+        balancer.start(config.getBalanceDelay(), config.getBalanceDelayTimeUnit())
+                .whenComplete((v, ex) -> {
+                    if (ex == null) {
+                        Node node = this.localNode;
+                        node.setBalanced(true);
+                        try {
+                            register.setData(Codec.encode(node));
+                        } catch (Exception e) {
+                            // FIXME
+                            ex = e;
+                        }
+                    }
+                    if (ex != null) {
+                        LOG.error("Balance error ", ex);
+                    }
+                });
+    }
+
+    public void stopBalancer() {
+        balancer.cancel();
+    }
+
     @Override
     public void destroy() throws Exception {
-        stopWatch();
+        if (balancer.isRunning()) {
+            balancer.cancel();
+        }
+        stopRouter();
         unregister();
     }
 
@@ -87,25 +135,69 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         // register node to zookeeper
         register();
 
-        // start watch nodes
-        startWatch();
+        // start router
+        startRouter();
+
+        // start balance at startup
+        startBalancer();
     }
 
-    @Override
-    public void setApplicationContext(ApplicationContext ctx) throws BeansException {
-        Map<String, TopologyChangeListener> listenerByName = ctx.getBeansOfType(TopologyChangeListener.class);
-        if (listenerByName != null && !listenerByName.isEmpty())
-            topologyChangeListeners.addAll(listenerByName.values());
+    private void startRouter() throws Exception {
+        router = new ListenableRouter(config.getZookeeperClient(), config.getVnodeFactor());
+        router.addTopologyChangeListener(new TopologyChangeListener() {
+
+            @Override
+            public void onNodeAdded(Node node) {
+                startBalancer();
+            }
+
+            @Override
+            public void onNodeRemoved(Node node) {
+                startBalancer();
+            }
+
+            @Override
+            public void onDiskAdded(Disk disk) {
+                startBalancer();
+            }
+
+            @Override
+            public void onDiskRemoved(Disk disk) {
+                startBalancer();
+
+            }
+
+            @Override
+            public void onDiskWeightChanged(Disk disk, double newWeight) {
+                startBalancer();
+            }
+
+            @Override
+            public void onNodeBalanceChanged(Node node) {
+                if (node.isBalanced()) {
+                    unbalanced.remove(node.getId());
+                } else {
+                    unbalanced.put(node.getId(), node);
+                }
+            }
+        });
+        this.unbalanced = router.getNodes().stream()
+                .filter(node -> !node.isBalanced())
+                .collect(Collectors.toMap(Node::getId, Function.identity()));
+    }
+
+    private void stopRouter() throws IOException {
+        router.close();
     }
 
     private void initialize() throws IOException {
         Node node = initLocalNode();
-        List<Disk> disks = configuration.getDisks();
+        List<Disk> disks = config.getDisks();
         node.setDisks(disks);
         for (Disk disk : disks) {
             disk.setNode(node);
             if (disk.getWeight() <= 0) {
-                disk.setWeight(configuration.getDiskDefaultWeight());
+                disk.setWeight(config.getDiskDefaultWeight());
             }
         }
         this.localNode = node;
@@ -115,96 +207,29 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         Node node = this.localNode;
         short id = node.getId();
         String path = ZKPaths.makePath(ZK_BASE_PATH, "nodes", String.valueOf(id));
-        CuratorFramework client = configuration.getZookeeperClient();
+        CuratorFramework client = config.getZookeeperClient();
 
         // check 
         if (client.checkExists().forPath(path) != null) {
-            throw new BeanInstantiationException(this.getClass(),
-                    "node[id=" + id + "] already exists");
+            throw new BeanInstantiationException(this.getClass(), "node[id=" + id + "] already exists");
         }
 
         byte[] data = Codec.encode(node);
         this.register = new PersistentNode(client, CreateMode.EPHEMERAL, false, path, data);
         this.register.start();
+        this.register.waitForInitialCreate(30, TimeUnit.SECONDS);
     }
 
     private void unregister() throws IOException {
         register.close();
     }
 
-    private void startWatch() throws Exception {
-        String path = ZKPaths.makePath(ZK_BASE_PATH, "nodes");
-        watcher = new PathChildrenCache(configuration.getZookeeperClient(), path, false);
-        watcher.getListenable().addListener((client, event) -> {
-
-            List<Node> nodes = new ArrayList<>();
-            List<String> children = client.getChildren().forPath(path);
-            for (String child : children) {
-                String childPath = ZKPaths.makePath(path, child);
-                byte[] data = client.getData().forPath(childPath);
-                nodes.add((Node) Codec.decode(data));
-            }
-            allNodes = nodes;
-            // build router
-            router = new ConsistentHashing(nodes, configuration.getVnodeFactor());
-
-            switch (event.getType()) {
-                case CHILD_ADDED:
-                    final Node nodeAdd = (Node) Codec.decode(client.getData().forPath(event.getData().getPath()));
-                    LOG.info("{} added", nodeAdd.toString());
-
-                    // ignore local node
-                    if (nodeAdd.equals(localNode())) {
-                        break;
-                    }
-                    // invoke listener#onNodeAdd
-                    topologyChangeListeners.forEach(listener -> {
-                        try {
-                            listener.onNodeAdded(nodeAdd);
-                        } catch (Exception e) {
-                            LOG.error("Invoke " + listener.getClass().getName() + "#onNodeAdded error", e);
-                        }
-                    });
-                    break;
-                case CHILD_REMOVED:
-                    final Node nodeRemoved = (Node) Codec.decode(client.getData().forPath(event.getData().getPath()));
-                    LOG.info("{} removed", nodeRemoved.toString());
-
-                    // ignore local node
-                    if (nodeRemoved.equals(localNode())) {
-                        break;
-                    }
-
-                    // invoke listener#onNodeRemoved
-                    topologyChangeListeners.forEach(listener -> {
-                        try {
-                            listener.onNodeRemoved(nodeRemoved);
-                        } catch (Exception e) {
-                            LOG.error("Invoke " + listener.getClass().getName() + "#onNodeRemoved error", e);
-                        }
-                    });
-                    break;
-                case CHILD_UPDATED:
-                    Node nodeUpdated = (Node) Codec.decode(client.getData().forPath(event.getData().getPath()));
-                    LOG.info("{} updated", nodeUpdated.toString());
-
-                    break;
-                default:
-                    break;
-            }
-        });
-        watcher.start();
-    }
-
-    private void stopWatch() throws IOException {
-        watcher.close();
-    }
-
     private Node initLocalNode() throws IOException {
         Node node = new Node();
-        node.setId(configuration.getId());
-        node.setPort(configuration.getPort());
-        InetAddress localHost = getLocalHostFromZK(configuration.getZookeeperAddress());
+        node.setBalanced(false);
+        node.setId(config.getId());
+        node.setPort(config.getPort());
+        InetAddress localHost = getLocalHostFromZK(config.getZookeeperAddress());
         node.setHostAddress(localHost.getHostAddress());
         node.setHostName(localHost.getHostName());
         return node;
@@ -243,5 +268,4 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         }
         return result;
     }
-
 }

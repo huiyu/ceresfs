@@ -4,10 +4,14 @@ import java.util.List;
 
 public interface Topology {
 
-    Node localNode();
+    Node getLocalNode();
+    
+    boolean isLocalNode(Node node);
 
-    List<Node> allNodes();
- 
+    List<Node> getAllNodes();
+
+    List<Node> getUnbalancedNodes();
+
     Disk route(byte[] id);
 
     Disk route(long id);
