@@ -217,6 +217,18 @@ public class Volume {
             }
         }
 
+        public void writeAndFlush(long id, Image.Type type, byte[] data, long expireTime)
+                throws IOException {
+            final ReentrantLock lock = volume.getWriteLock();
+            lock.lock();
+            try {
+                write(id, type, data, expireTime);
+                out.flush();
+            } finally {
+                lock.unlock();
+            }
+        }
+
         public Volume getVolume() {
             return volume;
         }

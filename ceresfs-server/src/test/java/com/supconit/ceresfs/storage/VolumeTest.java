@@ -1,5 +1,6 @@
 package com.supconit.ceresfs.storage;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -21,6 +22,11 @@ public class VolumeTest {
         folder.create();
     }
 
+    @After
+    public void tearDown() throws Exception {
+        folder.delete();
+    }
+
     @Test
     public void testReadAndWrite() throws IOException {
         long currentTime = System.currentTimeMillis();
@@ -33,14 +39,14 @@ public class VolumeTest {
 
             assertEquals(currentTime, image.getIndex().getVolume());
             assertEquals(0L, image.getIndex().getOffset());
-            assertTrue(image.getIndex().getTime() > currentTime);
+            assertTrue(image.getIndex().getTime() >= currentTime);
 
             image.getIndex().setId(2L);
             writer.write(image);
             writer.flush();
             assertEquals(currentTime, image.getIndex().getVolume());
             assertEquals(164L, image.getIndex().getOffset());
-            assertTrue(image.getIndex().getTime() > currentTime);
+            assertTrue(image.getIndex().getTime() >= currentTime);
         }
 
         // read
@@ -99,5 +105,4 @@ public class VolumeTest {
         index.setFlag(flag);
         return new Image(index, data);
     }
-
 }

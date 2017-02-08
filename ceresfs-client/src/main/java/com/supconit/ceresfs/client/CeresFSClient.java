@@ -23,9 +23,9 @@ public class CeresFSClient implements Closeable {
     private PersistentNode node;
     private ConsistentHashingRouter router;
 
-    public CeresFSClient(String zookeeprAddress) throws Exception {
+    public CeresFSClient(String zookeeperAddress) throws Exception {
         ExponentialBackoffRetry retryPolicy = new ExponentialBackoffRetry(200, 10);
-        zookeeperClient = CuratorFrameworkFactory.newClient(zookeeprAddress, retryPolicy);
+        zookeeperClient = CuratorFrameworkFactory.newClient(zookeeperAddress, retryPolicy);
         zookeeperClient.start();
 
         String path = Const.ZK_NODES_PATH;
@@ -41,18 +41,19 @@ public class CeresFSClient implements Closeable {
     }
 
     public Image get(long id) {
+        // TODO
         return null;
     }
 
     public CompletableFuture<Void> save(Image image) {
+        // TODO
         return null;
     }
 
     public void delete(long id) {
-
+        // TODO
     }
 
-    // TODO get save delete
     @Override
     public void close() throws IOException {
         zookeeperClient.close();
