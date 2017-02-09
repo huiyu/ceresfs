@@ -36,6 +36,10 @@ import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 
 public class DelayedBalancer implements Balancer {
 
+    enum State {
+        STOPPED, RUNNING, CANCELLED
+    }
+
     private static final Logger LOG = LoggerFactory.getLogger(DelayedBalancer.class);
 
     private final Topology topology;
@@ -45,7 +49,6 @@ public class DelayedBalancer implements Balancer {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition cancelled = lock.newCondition();
     private final Condition stopped = lock.newCondition();
-    //    private final Condition stopped = lock.newCondition();
     private volatile State state = State.STOPPED;
 
     public DelayedBalancer(Topology topology, Directory directory, Store store) {
@@ -111,10 +114,6 @@ public class DelayedBalancer implements Balancer {
         waitForStop();
     }
 
-    public State getState() {
-        return state;
-    }
-
     private void waitForStop() {
         lock.lock();
         try {
@@ -131,7 +130,7 @@ public class DelayedBalancer implements Balancer {
         Node localNode = topology.getLocalNode();
         List<Disk> disks = localNode.getDisks();
         disks.forEach(disk -> directory.forEachId(disk, id -> {
-            // interrupt
+            // interrupted
             if (!isRunning()) {
                 throw new UncheckedExecutionException(new InterruptedException());
             }
@@ -161,24 +160,29 @@ public class DelayedBalancer implements Balancer {
             if (LOG.isTraceEnabled()) {
                 LOG.trace("{} move to {}", image.toString(), disk.toString());
             }
-
             Image.Index index = image.getIndex();
-            store.save(disk, image.getIndex().getId(), image.getIndex().getType(),
-                    image.getData(), index.getExpireTime(),
-                    new NTimesRetryStrategy(5, 100L)).whenComplete((i, ex) -> {
+            store.save(
+                    disk,
+                    image.getIndex().getId(),
+                    image.getIndex().getType(),
+                    image.getData(),
+                    index.getExpireTime(),
+                    new NTimesRetryStrategy(5, 100L)
+            ).whenComplete((img, ex) -> {
                 if (ex != null) {
                     // FIXME: roughly interrupt
-                    cancel();
                     LOG.error("Save to " + disk.toString() + " error", ex);
-                } else {
-                    try {
-                        store.delete(disk, index);
-                        directory.delete(disk, index.getId());
-                    } catch (Exception e) {
-                        // FIXME: roughly interrupt
-                        cancel();
-                        LOG.error("Delete image " + image.toString() + " error", e);
-                    }
+                    cancel();
+                    return;
+                }
+
+                try {
+                    store.delete(disk, index);
+                    directory.delete(disk, index.getId());
+                } catch (Exception e) {
+                    // FIXME: roughly interrupt
+                    LOG.error("Delete image " + image.toString() + " error", e);
+                    cancel();
                 }
             });
         } catch (Exception e) {
@@ -200,21 +204,24 @@ public class DelayedBalancer implements Balancer {
                 .whenComplete((resp, ex) -> {
                     if (ex != null) {
                         // FIXME: roughly interrupt
-                        cancel();
                         LOG.error("Redistribute to " + node.toString() + " error", ex);
-                    } else if (resp.status().equals(HttpResponseStatus.OK)) {
+                        cancel();
+                        return;
+                    }
+
+                    if (resp.status().equals(HttpResponseStatus.OK)) {
                         try {
                             store.delete(disk, index);
                             directory.delete(disk, index.getId());
                         } catch (Exception e) {
-                            cancel();
+                            // FIXME: roughly interrupt
                             LOG.error("Delete file {} failed \n {}", node, resp.toString());
-                            // TODO
+                            cancel();
                         }
                     } else {
                         // FIXME: roughly interrupt
-                        cancel();
                         LOG.error("Redistribute to {} failed \n {}", node, resp.toString());
+                        cancel();
                     }
                 });
     }
@@ -251,9 +258,4 @@ public class DelayedBalancer implements Balancer {
         }
     }
 
-    public enum State {
-        STOPPED,
-        RUNNING,
-        CANCELLED
-    }
 }
