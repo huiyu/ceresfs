@@ -3,8 +3,8 @@ package com.supconit.ceresfs.compact;
 import com.supconit.ceresfs.config.Configuration;
 import com.supconit.ceresfs.retry.NTimesRetryStrategy;
 import com.supconit.ceresfs.storage.Image;
-import com.supconit.ceresfs.storage.ImageDirectory;
-import com.supconit.ceresfs.storage.ImageStore;
+import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.storage.Volume;
 import com.supconit.ceresfs.storage.VolumeContainer;
 import com.supconit.ceresfs.topology.Disk;
@@ -17,6 +17,7 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.List;
@@ -34,8 +35,8 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
     private final Configuration config;
     private final Topology topology;
     private final VolumeContainer volumeContainer;
-    private final ImageDirectory directory;
-    private final ImageStore store;
+    private final Directory directory;
+    private final Store store;
 
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -43,8 +44,8 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
     public MarkCopyVolumeCompactor(Configuration config,
                                    Topology topology,
                                    VolumeContainer volumeContainer,
-                                   ImageDirectory directory,
-                                   ImageStore store) {
+                                   Directory directory,
+                                   Store store) {
         this.config = config;
         this.topology = topology;
         this.volumeContainer = volumeContainer;
@@ -56,10 +57,10 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
         lock.lock();
         try {
             final long currentTime = System.currentTimeMillis();
-            List<Disk> disks = topology.localNode().getDisks();
+            List<Disk> disks = topology.getLocalNode().getDisks();
             for (Disk disk : disks) {
                 LOG.info("Scanning {}", disk);
-                List<Volume> volumes = volumeContainer.getAllVolumes(disk.getPath());
+                List<File> volumes = volumeContainer.getAllVolumes(disk.getPath());
                 if (volumes == null || volumes.isEmpty()) {
                     LOG.info("{} has no volumes, skipped.", disk);
                     continue;
@@ -71,13 +72,13 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
                     // do compact
                     if (dead > config.getVolumeMaxSize() * (1.0 - config.getVolumeCompactThreshold())) {
                         LOG.info("Volume {} has {} dead space, start compacting...",
-                                volume.getFile().getName(), dead);
+                                volume.getName(), dead);
                         compact(currentTime, disk, volume);
                         LOG.info("Volume {} compacting completed",
-                                volume.getFile().getName(), dead);
+                                volume.getName(), dead);
                     } else {
                         LOG.info("Volume {} has {} dead space, skipped",
-                                volume.getFile().getName(), dead);
+                                volume.getName(), dead);
                     }
                 });
             }
@@ -86,9 +87,9 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
         }
     }
 
-    private long mark(long currentTime, Disk disk, Volume volume) {
-        final Volume.Reader reader = volumeContainer.getReader(volume.getFile());
-        final ReentrantLock readLock = volume.getReadLock();
+    protected long mark(long currentTime, Disk disk, File volume) {
+        final Volume.Reader reader = volumeContainer.getReader(volume);
+        final ReentrantLock readLock = reader.getLock();
         readLock.lock();
         long invalid = 0;
         try {
@@ -114,31 +115,37 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
         return invalid;
     }
 
-    private void compact(long currentTime, Disk disk, Volume volume) {
-        final Volume.Reader reader = volumeContainer.getReader(volume.getFile());
-        final ReentrantLock writeLock = volume.getWriteLock();
+    protected void compact(long currentTime, Disk disk, File volume) {
+        final Volume.Reader reader = volumeContainer.getReader(volume);
+        final Volume.Writer writer = volumeContainer.getWriter(volume);
+        final ReentrantLock writeLock = writer.getLock();
         writeLock.lock();
         try {
             // disable write first
-            volumeContainer.disableWriter(volume.getFile());
+            volumeContainer.closeWriter(volume);
             reader.seek(0L);
             Image image;
             while ((image = reader.next()) != null) {
                 Image.Index index = image.getIndex();
-                if (!isDeleted(index) || !isExpired(currentTime, index)) {
-                    store.save(disk, index.getId(), index.getType(), image.getData(), index.getExpireTime(),
-                            new NTimesRetryStrategy(5, 1000L))
-                            .whenComplete((i, e) -> {
-                                if (e != null) {
-                                    LOG.error("Redistribute error", e);
-                                } else {
-                                    directory.save(disk, i.getIndex());
-                                }
-                            });
+                if (!isDeleted(index) && !isExpired(currentTime, index)) {
+                    store.save(
+                            disk,
+                            index.getId(),
+                            index.getType(),
+                            image.getData(),
+                            index.getExpireTime(),
+                            new NTimesRetryStrategy(5, 1000L)
+                    ).whenComplete((i, e) -> {
+                        if (e != null) {
+                            LOG.error("Redistribute error", e);
+                        } else {
+                            directory.save(disk, i.getIndex());
+                        }
+                    });
                 }
             }
             // disable & delete volume after all
-            volumeContainer.deleteVolume(volume.getFile());
+            volumeContainer.deleteVolume(volume);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
@@ -146,11 +153,11 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
         }
     }
 
-    private boolean isExpired(long currentTime, Image.Index index) {
+    protected boolean isExpired(long currentTime, Image.Index index) {
         return index.getExpireTime() > 0 && index.getExpireTime() < currentTime;
     }
 
-    private boolean isDeleted(Image.Index index) {
+    protected boolean isDeleted(Image.Index index) {
         return index.getFlag() == Image.FLAG_DELETED;
     }
 
@@ -171,5 +178,4 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
     public boolean isRunning() {
         return lock.getHoldCount() > 0;
     }
-
 }
