@@ -113,7 +113,7 @@ public class Image implements Serializable {
 
         private long time; // 8 byte
         private long expireTime; // 8 byte
-        
+
         private byte replication; // 1 byte
 
         public long getId() {

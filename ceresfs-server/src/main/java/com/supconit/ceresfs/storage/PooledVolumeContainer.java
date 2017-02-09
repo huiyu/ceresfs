@@ -17,16 +17,14 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Component
 public class PooledVolumeContainer implements VolumeContainer {
@@ -37,21 +35,14 @@ public class PooledVolumeContainer implements VolumeContainer {
 
     private static final Logger LOG = LoggerFactory.getLogger(PooledVolumeContainer.class);
 
-    private final Configuration config;
-    private final Map<String, Volume> volumeByPath = new ConcurrentHashMap<>();
-
     protected CommonPool<Volume.Writer> writerPool;
     protected CommonPool<Volume.Reader> readerPool;
-    protected CommonPool<Volume.Updater> updaterPool;
     protected ActiveWriterPool activeWriterPool;
 
     @Autowired
     public PooledVolumeContainer(Configuration config) {
-        this.config = config;
-        // TODO change config
         this.writerPool = new CommonPool<>(EXPIRE_TIME, EXPIRE_TIME_UNIT);
         this.readerPool = new CommonPool<>(EXPIRE_TIME, EXPIRE_TIME_UNIT);
-        this.updaterPool = new CommonPool<>(EXPIRE_TIME, EXPIRE_TIME_UNIT);
         this.activeWriterPool = new ActiveWriterPool(config.getVolumeWriteParallelism(), config.getVolumeMaxSize());
     }
 
@@ -64,42 +55,39 @@ public class PooledVolumeContainer implements VolumeContainer {
     }
 
     @Override
-    public Volume getVolume(File volume) {
-        Assert.notNull(volume);
-        Assert.isTrue(volume.exists(), "Volume " + volume.getName() + " is not exists");
-        return volumeByPath.getOrDefault(volume.getAbsolutePath(), new Volume(volume));
-    }
-
-    @Override
     public Volume.Writer getActiveWriter(String disk) {
-        return activeWriterPool.get(disk);
+        return activeWriterPool.select(disk);
     }
 
     @Override
     public Volume.Writer getWriter(File volume) {
-        return writerPool.computeIfAbsent(volume.getAbsolutePath(),
-                () -> Volume.createWriter(getVolume(volume)));
+        if (!volume.exists()) {
+            return null;
+        }
+        Volume.Writer writer = activeWriterPool.get(volume);
+        if (writer == null) {
+            writer = writerPool.computeIfAbsent(volume.getAbsolutePath(),
+                    () -> Volume.createWriter(volume));
+        }
+        return writer;
     }
 
     @Override
     public Volume.Reader getReader(File volume) {
+        if (!volume.exists()) {
+            return null;
+        }
         return readerPool.computeIfAbsent(volume.getAbsolutePath(),
-                () -> Volume.createReader(getVolume(volume)));
+                () -> Volume.createReader(volume));
     }
 
     @Override
-    public Volume.Updater getUpdater(File volume) {
-        return updaterPool.computeIfAbsent(volume.getAbsolutePath(),
-                () -> Volume.createUpdater(getVolume(volume)));
-    }
-
-    @Override
-    public List<Volume> getAllVolumes(String disk) {
+    public List<File> getAllVolumes(String disk) {
         File[] files = new File(disk).listFiles(p -> p.getName().matches("\\d*"));
         if (files == null || files.length == 0) {
             return null;
         }
-        return Stream.of(files).map(this::getVolume).collect(Collectors.toList());
+        return Arrays.asList(files);
     }
 
     @Override
@@ -107,10 +95,8 @@ public class PooledVolumeContainer implements VolumeContainer {
         // close reader , writer and updater
         // assert volume is fully locked
         Assert.isTrue(volume.exists());
-        volumeByPath.remove(volume.getAbsolutePath());
         closeWriter(volume);
         closeReader(volume);
-        closeUpdater(volume);
     }
 
     @Override
@@ -122,11 +108,6 @@ public class PooledVolumeContainer implements VolumeContainer {
     @Override
     public void closeReader(File volume) {
         readerPool.close(volume.getAbsolutePath());
-    }
-
-    @Override
-    public void closeUpdater(File volume) {
-        updaterPool.close(volume.getAbsolutePath());
     }
 
     @Override
@@ -194,7 +175,7 @@ public class PooledVolumeContainer implements VolumeContainer {
             this.writersByDisk = new HashMap<>();
         }
 
-        public synchronized Volume.Writer get(String disk) {
+        public synchronized Volume.Writer select(String disk) {
             Volume.Writer[] writers = writersByDisk.get(disk);
             if (writers == null) {
                 writers = new Volume.Writer[size];
@@ -214,6 +195,22 @@ public class PooledVolumeContainer implements VolumeContainer {
             return writer;
         }
 
+        public Volume.Writer get(File volume) {
+            String disk = volume.getParent();
+            Volume.Writer[] writers = writersByDisk.get(disk);
+
+            if (writers == null || writers.length == 0) {
+                return null;
+            }
+
+            for (Volume.Writer writer : writers) {
+                if (writer.getVolume().equals(volume)) {
+                    return writer;
+                }
+            }
+            return null;
+        }
+
         public synchronized void disable(File volume) {
             String disk = volume.getParent();
 
@@ -223,7 +220,7 @@ public class PooledVolumeContainer implements VolumeContainer {
 
             for (int i = 0; i < writers.length; i++) {
                 Volume.Writer w = writers[i];
-                if (w.getVolume().getFile().equals(volume)) {
+                if (w.getVolume().equals(volume)) {
                     closeSilently(w);
                     w = newWriter(disk);
                     writers[i] = w;
@@ -241,8 +238,7 @@ public class PooledVolumeContainer implements VolumeContainer {
                     if (!file.createNewFile()) {
                         throw new IOException("Create new file " + file.getName() + " error");
                     }
-                    Volume volume = new Volume(file);
-                    Volume.Writer writer = Volume.createWriter(volume);
+                    Volume.Writer writer = Volume.createWriter(file);
                     return writer;
                 }
             } catch (IOException e) {

@@ -32,7 +32,7 @@ public class VolumeTest {
         long currentTime = System.currentTimeMillis();
         File file = new File(folder.getRoot(), String.valueOf(currentTime));
         // write
-        try (Volume.Writer writer = Volume.createWriter(new Volume(file))) {
+        try (Volume.Writer writer = Volume.createWriter(file)) {
             Image image = createImage(1L, Image.FLAG_NORMAL, Image.Type.JPG, -1L, new byte[100]);
             writer.write(image);
             writer.flush();
@@ -50,7 +50,7 @@ public class VolumeTest {
         }
 
         // read
-        try (Volume.Reader reader = Volume.createReader(new Volume(file))) {
+        try (Volume.Reader reader = Volume.createReader(file)) {
             Image image = reader.read(0);
             assertEquals(1L, image.getIndex().getId());
             assertArrayEquals(new byte[100], image.getData());
@@ -60,7 +60,7 @@ public class VolumeTest {
         }
 
         // iterate
-        try (Volume.Reader reader = Volume.createReader(new Volume(file))) {
+        try (Volume.Reader reader = Volume.createReader(file)) {
             Image next;
             int count = 0;
             while ((next = reader.next()) != null) {
@@ -76,21 +76,21 @@ public class VolumeTest {
     public void testUpdate() throws IOException {
         long currentTime = System.currentTimeMillis();
         File file = new File(folder.getRoot(), String.valueOf(currentTime));
-        try (Volume.Writer writer = Volume.createWriter(new Volume(file))) {
+        try (Volume.Writer writer = Volume.createWriter(file)) {
             Image image = createImage(1L, Image.FLAG_NORMAL, Image.Type.JPG, -1L, new byte[100]);
             writer.write(image);
         }
 
-        try (Volume.Reader reader = Volume.createReader(new Volume(file))) {
+        try (Volume.Reader reader = Volume.createReader(file)) {
             Image image = reader.read(0);
             assertEquals(Image.FLAG_NORMAL, image.getIndex().getFlag());
 
-            try (Volume.Updater updater = Volume.createUpdater(new Volume(file))) {
-                updater.markDeleted(0);
+            try (Volume.Writer writer = Volume.createWriter(file)) {
+                writer.markDeleted(0);
                 image = reader.read(0);
                 assertEquals(Image.FLAG_DELETED, image.getIndex().getFlag());
 
-                updater.markNormal(0);
+                writer.markNormal(0);
                 image = reader.read(0);
                 assertEquals(Image.FLAG_NORMAL, image.getIndex().getFlag());
             }

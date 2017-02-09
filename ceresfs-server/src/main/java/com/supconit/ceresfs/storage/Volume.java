@@ -10,56 +10,33 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * TODO performance improvement
- */
 public class Volume {
 
-    private final ReentrantLock readLock = new ReentrantLock();
-    private final ReentrantLock writeLock = new ReentrantLock();
-    private final File file;
-
-    public Volume(File file) {
-        this.file = file;
+    private Volume() {
     }
 
-    public static Reader createReader(Volume volume) throws FileNotFoundException {
+    public static Reader createReader(File volume) throws FileNotFoundException {
         return new Reader(volume);
     }
 
-    public static Writer createWriter(Volume volume) throws FileNotFoundException {
+    public static Writer createWriter(File volume) throws FileNotFoundException {
         return new Writer(volume);
-    }
-
-    public static Updater createUpdater(Volume volume) throws FileNotFoundException {
-        return new Updater(volume);
-    }
-
-    public ReentrantLock getWriteLock() {
-        return writeLock;
-    }
-
-    public File getFile() {
-        return file;
-    }
-
-    public ReentrantLock getReadLock() {
-        return readLock;
     }
 
     public static final class Reader implements Closeable {
 
+        private final ReentrantLock lock = new ReentrantLock();
         private final RandomAccessFile raf;
-        private final Volume volume;
+        private final File volume;
         private volatile boolean closed = false;
 
-        private Reader(Volume volume) throws FileNotFoundException {
+        private Reader(File volume) throws FileNotFoundException {
             this.volume = volume;
-            this.raf = new RandomAccessFile(volume.getFile(), "r");
+            this.raf = new RandomAccessFile(volume, "r");
         }
 
         public void seek(long pos) throws IOException {
-            final ReentrantLock lock = volume.getReadLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 raf.seek(pos);
@@ -69,7 +46,7 @@ public class Volume {
         }
 
         public Image read(long pos) throws IOException {
-            final ReentrantLock lock = volume.getReadLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 seek(pos);
@@ -80,7 +57,7 @@ public class Volume {
         }
 
         public Image next() throws IOException {
-            final ReentrantLock lock = volume.getReadLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 // read index
@@ -110,8 +87,12 @@ public class Volume {
             }
         }
 
-        public Volume getVolume() {
+        public File getVolume() {
             return volume;
+        }
+
+        public ReentrantLock getLock() {
+            return lock;
         }
 
         public boolean isClosed() {
@@ -120,7 +101,7 @@ public class Volume {
 
         @Override
         public void close() throws IOException {
-            final ReentrantLock lock = volume.getReadLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 this.closed = true;
@@ -137,20 +118,24 @@ public class Volume {
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         };
 
+        private final ReentrantLock lock = new ReentrantLock();
+        private final RandomAccessFile raf;
         private final BufferedOutputStream out;
-        private final Volume volume;
+        private final File volume;
         private final long volumeId;
         private volatile long size;
         private volatile boolean closed = false;
 
-        private Writer(Volume volume) throws FileNotFoundException {
+        private Writer(File volume) throws FileNotFoundException {
             this.volume = volume;
-            this.volumeId = Long.valueOf(volume.getFile().getName());
-            this.out = new BufferedOutputStream(new FileOutputStream(volume.getFile(), true));
+            this.volumeId = Long.valueOf(volume.getName());
+            // FIXME: combine out and raf into a single BufferedRandomAccessFile
+            this.out = new BufferedOutputStream(new FileOutputStream(volume, true));
+            this.raf = new RandomAccessFile(volume, "rw");
         }
 
         public void write(Image image) throws IOException {
-            final ReentrantLock lock = volume.getWriteLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 Image.Index index = image.getIndex(); // 46 bytes, padding to 64 bytes
@@ -197,7 +182,7 @@ public class Volume {
         }
 
         public void flush() throws IOException {
-            final ReentrantLock lock = volume.getWriteLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 out.flush();
@@ -207,7 +192,7 @@ public class Volume {
         }
 
         public void writeAndFlush(Image image) throws IOException {
-            final ReentrantLock lock = volume.getWriteLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 write(image);
@@ -219,7 +204,7 @@ public class Volume {
 
         public void writeAndFlush(long id, Image.Type type, byte[] data, long expireTime)
                 throws IOException {
-            final ReentrantLock lock = volume.getWriteLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 write(id, type, data, expireTime);
@@ -229,7 +214,30 @@ public class Volume {
             }
         }
 
-        public Volume getVolume() {
+        public void markDeleted(long pos) throws IOException {
+            mark(pos, Image.FLAG_DELETED);
+        }
+
+        public void markNormal(long pos) throws IOException {
+            mark(pos, Image.FLAG_NORMAL);
+        }
+
+        private void mark(long pos, byte flag) throws IOException {
+            final ReentrantLock lock = this.lock;
+            lock.lock();
+            try {
+                raf.seek(pos + 16);
+                raf.writeByte(flag);
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        public ReentrantLock getLock() {
+            return lock;
+        }
+
+        public File getVolume() {
             return volume;
         }
 
@@ -243,62 +251,11 @@ public class Volume {
 
         @Override
         public void close() throws IOException {
-            final ReentrantLock lock = volume.getWriteLock();
+            final ReentrantLock lock = this.lock;
             lock.lock();
             try {
                 this.closed = true;
                 this.out.close();
-            } finally {
-                lock.unlock();
-            }
-        }
-    }
-
-    public static final class Updater implements Closeable {
-
-        private final RandomAccessFile raf;
-        private final Volume volume;
-        private volatile boolean closed = false;
-
-        private Updater(Volume volume) throws FileNotFoundException {
-            this.volume = volume;
-            this.raf = new RandomAccessFile(volume.getFile(), "rw");
-        }
-
-        public void markDeleted(long pos) throws IOException {
-            mark(pos, Image.FLAG_DELETED);
-        }
-
-        public void markNormal(long pos) throws IOException {
-            mark(pos, Image.FLAG_NORMAL);
-        }
-
-        private void mark(long pos, byte flag) throws IOException {
-            final ReentrantLock lock = volume.getWriteLock();
-            lock.lock();
-            try {
-                raf.seek(pos + 16);
-                raf.writeByte(flag);
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        public Volume getVolume() {
-            return volume;
-        }
-
-        public boolean isClosed() {
-            return closed;
-        }
-
-        @Override
-        public void close() throws IOException {
-            final ReentrantLock lock = volume.getWriteLock();
-            lock.lock();
-            try {
-                this.closed = true;
-                this.raf.close();
             } finally {
                 lock.unlock();
             }
