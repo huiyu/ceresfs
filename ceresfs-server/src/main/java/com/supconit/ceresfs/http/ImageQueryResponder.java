@@ -76,7 +76,6 @@ public class ImageQueryResponder extends AbstractAsyncHttpResponder {
             List<Node> unbalancedNodes = topology.getUnbalancedNodes();
             if (unbalancedNodes.isEmpty()) {
                 
-//                if (!node.equals(topology.getLocalNode())) {
                 if (topology.isLocalNode(node)) {
                     return forward(node, req);
                 }
