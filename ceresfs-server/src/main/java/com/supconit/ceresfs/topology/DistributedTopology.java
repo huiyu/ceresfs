@@ -14,7 +14,6 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.nodes.PersistentNode;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.Shell;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanInstantiationException;
@@ -22,12 +21,10 @@ import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.util.Assert;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -94,7 +91,9 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
     }
 
     public void startBalancer() {
-        if (balancer.isRunning()) stopBalancer();
+        if (balancer.isRunning()) {
+            stopBalancer();
+        }
         balancer.start(config.getBalanceDelay(), config.getBalanceDelayTimeUnit())
                 .whenComplete((v, ex) -> {
                     if (ex == null) {
@@ -190,7 +189,7 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         router.close();
     }
 
-    private void initialize() throws IOException {
+    private void initialize() throws Exception {
         Node node = initLocalNode();
         List<Disk> disks = config.getDisks();
         node.setDisks(disks);
@@ -217,55 +216,21 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
         byte[] data = Codec.encode(node);
         this.register = new PersistentNode(client, CreateMode.EPHEMERAL, false, path, data);
         this.register.start();
-        this.register.waitForInitialCreate(30, TimeUnit.SECONDS);
+        this.register.waitForInitialCreate(5, TimeUnit.MINUTES);
     }
 
     private void unregister() throws IOException {
         register.close();
     }
 
-    private Node initLocalNode() throws IOException {
+    private Node initLocalNode() throws Exception {
         Node node = new Node();
         node.setBalanced(false);
         node.setId(config.getId());
         node.setPort(config.getPort());
-        InetAddress localHost = getLocalHostFromZK(config.getZookeeperAddress());
+        InetAddress localHost = NetUtil.getLocalAddressFromZookeeper(config.getZookeeperClient());
         node.setHostAddress(localHost.getHostAddress());
         node.setHostName(localHost.getHostName());
         return node;
-    }
-
-    private InetAddress getLocalHostFromZK(String zkQuorum) throws IOException {
-        Map<String, String> portByHost = parseMapProperties(zkQuorum, "2181");
-        for (Map.Entry<String, String> entry : portByHost.entrySet()) {
-            String host = entry.getKey();
-            int port = Integer.parseInt(entry.getValue());
-            InetAddress address = getLocalHostFromZK(host, port);
-            if (address != null) {
-                return address;
-            }
-        }
-        throw new IOException("Can't connect to zookeeper " + zkQuorum);
-    }
-
-    private InetAddress getLocalHostFromZK(String zkHost, int zkPort) {
-        try {
-            return NetUtil.getLocalHostFromRemoteServer(zkHost, zkPort);
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
-    private Map<String, String> parseMapProperties(String properties, String defaultValue) {
-        String[] props = properties.split(";");
-        Map<String, String> result = new HashMap<>(props.length);
-        for (String prop : props) {
-            String[] pair = prop.split(":");
-            Assert.isTrue(pair.length <= 2, "Invalid property format: " + defaultValue);
-            String key = pair[0];
-            String val = pair.length > 1 ? pair[1] : defaultValue;
-            result.put(key, val);
-        }
-        return result;
     }
 }
