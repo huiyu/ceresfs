@@ -10,6 +10,8 @@
         <module>ceresfs-server</module>
         <module>ceresfs-client</module>
         <module>ceresfs-common</module>
+        <module>ceresfs-assembly</module>
+        <module>ceresfs-snowflake</module>
     </modules>
     <groupId>com.supconit.hc</groupId>
     <artifactId>ceresfs</artifactId>
@@ -26,13 +28,22 @@
         </developer>
     </developers>
 
-
     <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>com.supconit.hc</groupId>
                 <artifactId>ceresfs-common</artifactId>
-                <version>1.0-SNAPSHOT</version>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.supconit.hc</groupId>
+                <artifactId>ceresfs-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.supconit.hc</groupId>
+                <artifactId>ceresfs-snowflake</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>

@@ -2,6 +2,7 @@ package com.supconit.ceresfs.http;
 
 import com.google.common.util.concurrent.UncheckedExecutionException;
 
+import com.supconit.ceresfs.snowflake.Snowflake;
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.Directory;
 import com.supconit.ceresfs.storage.Store;
@@ -48,17 +49,20 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
     private final Topology topology;
     private final Directory directory;
     private final Store store;
+    private final Snowflake snowflake;
 
     public ImageStoreResponder(Topology topology, Directory directory, Store store) {
         this.topology = topology;
         this.directory = directory;
         this.store = store;
+        this.snowflake = new Snowflake.Builder(topology.getLocalNode().getId(), Short.SIZE).build();
     }
 
     @Override
     public String[] paths() {
         return new String[]{"/image"};
     }
+
 
     @Override
     public HttpMethod[] methods() {
@@ -69,7 +73,7 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
     protected CompletableFuture<FullHttpResponse> getResponse(FullHttpRequest req) {
         HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(USE_MEMORY, req);
         try {
-            ImageStoreRequestResolver resolver = new ImageStoreRequestResolver(decoder);
+            ImageStoreRequestResolver resolver = new ImageStoreRequestResolver(decoder, snowflake);
             if (resolver.hasError()) {
                 return CompletableFuture.completedFuture(resolver.getErrorResponse());
             }
@@ -125,25 +129,24 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
         private long imageExpireTime;
         private byte[] imageData;
 
-        public ImageStoreRequestResolver(HttpPostRequestDecoder decoder) throws IOException {
-            // check id
+        public ImageStoreRequestResolver(HttpPostRequestDecoder decoder, Snowflake snowflake)
+                throws IOException {
+            
             InterfaceHttpData idData = decoder.getBodyHttpData("id");
             if (idData == null) {
-                this.errorResponse = HttpUtil.newResponse(BAD_REQUEST, "No image id.");
-                return;
-            }
-
-            if (!(idData instanceof Attribute)) {
+                this.imageId = snowflake.nextId();
+            } else if (!(idData instanceof Attribute)) {
                 this.errorResponse = HttpUtil.newResponse(BAD_REQUEST, "Can't resolve image id.");
                 return;
-            }
-            try {
-                this.imageId = Long.parseLong(((Attribute) idData).getValue());
-            } catch (NumberFormatException e) {
-                this.errorResponse = HttpUtil.newResponse(
-                        BAD_REQUEST,
-                        "Image id " + ((Attribute) idData).getValue() + " is not long value.");
-                return;
+            } else {
+                try {
+                    this.imageId = Long.parseLong(((Attribute) idData).getValue());
+                } catch (NumberFormatException e) {
+                    this.errorResponse = HttpUtil.newResponse(
+                            BAD_REQUEST,
+                            "Image id " + ((Attribute) idData).getValue() + " is not long value.");
+                    return;
+                }
             }
 
             // read file
