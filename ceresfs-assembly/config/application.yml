@@ -1,0 +1,26 @@
+ceresfs:
+  id: 1
+  port: 9900
+  replication: 1
+  zookeeper-address: localhost:2181
+  image-max-size: 10485760
+  volume-max-size: 17179869184
+  volume-write-parallelism: 5
+  volume-compact-threshold: 0.9
+  volume-compact-period: 15
+  volume-compact-period-timeunit: MINUTES
+  disk-default-weight: 1
+  vnode-factor: 10000
+  
+  # Data balance config
+  balance-delay: 10
+  balance-delay-timeunit: SECONDS
+  
+  disks:
+    - 
+      id: 1
+      path: /tmp/ceresfs
+      weight: 1
+      
+  
+    
