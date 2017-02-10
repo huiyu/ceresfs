@@ -86,8 +86,7 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
                         node.getHostAddress(), node.getPort(), disk.getPath());
             }
 
-//            if (!node.equals(topology.getLocalNode())) { // forward
-            if (topology.isLocalNode(node)) {
+            if (topology.isLocalNode(node)) { // not local, forward request
                 return forward(node, req);
             }
 
@@ -131,7 +130,7 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
 
         public ImageStoreRequestResolver(HttpPostRequestDecoder decoder, Snowflake snowflake)
                 throws IOException {
-            
+
             InterfaceHttpData idData = decoder.getBodyHttpData("id");
             if (idData == null) {
                 this.imageId = snowflake.nextId();
