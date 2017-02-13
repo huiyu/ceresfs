@@ -1,5 +1,7 @@
 package com.supconit.ceresfs.storage;
 
+import com.supconit.ceresfs.ImageType;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -33,7 +35,7 @@ public class VolumeTest {
         File file = new File(folder.getRoot(), String.valueOf(currentTime));
         // write
         try (Volume.Writer writer = Volume.createWriter(file)) {
-            Image image = createImage(1L, Image.FLAG_NORMAL, Image.Type.JPG, -1L, new byte[100]);
+            Image image = createImage(1L, ImageIndex.FLAG_NORMAL, ImageType.JPG, -1L, new byte[100]);
             writer.write(image);
             writer.flush();
 
@@ -77,28 +79,28 @@ public class VolumeTest {
         long currentTime = System.currentTimeMillis();
         File file = new File(folder.getRoot(), String.valueOf(currentTime));
         try (Volume.Writer writer = Volume.createWriter(file)) {
-            Image image = createImage(1L, Image.FLAG_NORMAL, Image.Type.JPG, -1L, new byte[100]);
+            Image image = createImage(1L, ImageIndex.FLAG_NORMAL, ImageType.JPG, -1L, new byte[100]);
             writer.write(image);
         }
 
         try (Volume.Reader reader = Volume.createReader(file)) {
             Image image = reader.read(0);
-            assertEquals(Image.FLAG_NORMAL, image.getIndex().getFlag());
+            assertEquals(ImageIndex.FLAG_NORMAL, image.getIndex().getFlag());
 
             try (Volume.Writer writer = Volume.createWriter(file)) {
                 writer.markDeleted(0);
                 image = reader.read(0);
-                assertEquals(Image.FLAG_DELETED, image.getIndex().getFlag());
+                assertEquals(ImageIndex.FLAG_DELETED, image.getIndex().getFlag());
 
                 writer.markNormal(0);
                 image = reader.read(0);
-                assertEquals(Image.FLAG_NORMAL, image.getIndex().getFlag());
+                assertEquals(ImageIndex.FLAG_NORMAL, image.getIndex().getFlag());
             }
         }
     }
 
-    private Image createImage(long id, byte flag, Image.Type type, long expireTime, byte[] data) {
-        Image.Index index = new Image.Index();
+    private Image createImage(long id, byte flag, ImageType type, long expireTime, byte[] data) {
+        ImageIndex index = new ImageIndex();
         index.setId(id);
         index.setType(type);
         index.setExpireTime(expireTime);

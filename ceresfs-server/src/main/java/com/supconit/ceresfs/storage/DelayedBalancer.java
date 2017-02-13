@@ -3,6 +3,7 @@ package com.supconit.ceresfs.storage;
 import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 
+import com.supconit.ceresfs.Const;
 import com.supconit.ceresfs.http.HttpClientPool;
 import com.supconit.ceresfs.retry.NTimesRetryStrategy;
 import com.supconit.ceresfs.topology.Disk;
@@ -43,6 +44,7 @@ public class DelayedBalancer implements Balancer {
     private static final Logger LOG = LoggerFactory.getLogger(DelayedBalancer.class);
 
     private final Topology topology;
+    private final HttpClientPool httpClientPool;
     private final Directory directory;
     private final Store store;
 
@@ -51,8 +53,13 @@ public class DelayedBalancer implements Balancer {
     private final Condition stopped = lock.newCondition();
     private volatile State state = State.STOPPED;
 
-    public DelayedBalancer(Topology topology, Directory directory, Store store) {
+    public DelayedBalancer(Topology topology,
+                           HttpClientPool httpClientPool,
+                           Directory directory,
+                           Store store
+    ) {
         this.topology = topology;
+        this.httpClientPool = httpClientPool;
         this.directory = directory;
         this.store = store;
     }
@@ -146,7 +153,7 @@ public class DelayedBalancer implements Balancer {
 
     protected Image getImageById(Disk disk, long id) {
         try {
-            Image.Index index = directory.get(disk, id);
+            ImageIndex index = directory.get(disk, id);
             Assert.notNull(index);
             Image image = store.get(disk, index);
             return image;
@@ -160,7 +167,7 @@ public class DelayedBalancer implements Balancer {
             if (LOG.isTraceEnabled()) {
                 LOG.trace("{} move to {}", image.toString(), disk.toString());
             }
-            Image.Index index = image.getIndex();
+            ImageIndex index = image.getIndex();
             store.save(
                     disk,
                     image.getIndex().getId(),
@@ -197,9 +204,9 @@ public class DelayedBalancer implements Balancer {
         }
 
         Node node = disk.getNode();
-        Image.Index index = image.getIndex();
+        ImageIndex index = image.getIndex();
         FullHttpRequest request = newPostRequest(image);
-        HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
+        httpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
                 .newCall(request)
                 .whenComplete((resp, ex) -> {
                     if (ex != null) {
@@ -228,13 +235,13 @@ public class DelayedBalancer implements Balancer {
 
     protected FullHttpRequest newPostRequest(Image image) {
         try {
-            Image.Index index = image.getIndex();
+            ImageIndex index = image.getIndex();
             FullHttpRequest request = new DefaultFullHttpRequest(
                     HttpVersion.HTTP_1_1, HttpMethod.POST, "/image");
             HttpDataFactory factory = new DefaultHttpDataFactory();
             HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(request, true);
-            encoder.addBodyAttribute("id", String.valueOf(index.getId()));
-            encoder.addBodyAttribute("expireTime", String.valueOf(index.getExpireTime()));
+            encoder.addBodyAttribute(Const.HTTP_HEADER_IMAGE_ID, String.valueOf(index.getId()));
+            encoder.addBodyAttribute(Const.HTTP_HEADER_EXPIRE_TIME, String.valueOf(index.getExpireTime()));
 
             FileUpload fileUpload = factory.createFileUpload(
                     request,

@@ -1,5 +1,6 @@
 package com.supconit.ceresfs.storage;
 
+import com.supconit.ceresfs.ImageType;
 import com.supconit.ceresfs.config.Configuration;
 import com.supconit.ceresfs.topology.Disk;
 
@@ -49,11 +50,11 @@ public class VolumeStoreTest {
         disk.setPath(volumeDir.getPath());
         disk.setWeight(1.0);
 
-        store.save(disk, 1L, Image.Type.JPG, new byte[(int) (SIZE_1MB / 2L)]).get();
-        store.save(disk, 1L, Image.Type.JPG, new byte[(int) (SIZE_1MB / 2L)]).get();
+        store.save(disk, 1L, ImageType.JPG, new byte[(int) (SIZE_1MB / 2L)]).get();
+        store.save(disk, 1L, ImageType.JPG, new byte[(int) (SIZE_1MB / 2L)]).get();
 
         // automatic create new volume file
-        store.save(disk, 1L, Image.Type.JPG, new byte[(int) (SIZE_1MB / 2L)]).get();
+        store.save(disk, 1L, ImageType.JPG, new byte[(int) (SIZE_1MB / 2L)]).get();
         assertEquals(2,
                 Stream.of(volumeDir.listFiles()).filter(file -> file.length() > 0).count());
         store.destroy();

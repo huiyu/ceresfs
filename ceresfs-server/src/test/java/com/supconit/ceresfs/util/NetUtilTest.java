@@ -35,5 +35,6 @@ public class NetUtilTest {
         InetAddress address = NetUtil.getLocalAddressFromZookeeper(client);
         assertNotNull(address);
         assertEquals("127.0.0.1", address.getHostAddress());
+        client.close();
     }
 }

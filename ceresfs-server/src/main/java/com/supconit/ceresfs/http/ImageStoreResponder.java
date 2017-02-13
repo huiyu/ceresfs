@@ -2,9 +2,11 @@ package com.supconit.ceresfs.http;
 
 import com.google.common.util.concurrent.UncheckedExecutionException;
 
+import com.supconit.ceresfs.Const;
+import com.supconit.ceresfs.ImageType;
 import com.supconit.ceresfs.snowflake.Snowflake;
-import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.ImageIndex;
 import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.topology.Disk;
 import com.supconit.ceresfs.topology.Node;
@@ -55,14 +57,13 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
         this.topology = topology;
         this.directory = directory;
         this.store = store;
-        this.snowflake = new Snowflake.Builder(topology.getLocalNode().getId(), Short.SIZE).build();
+        this.snowflake = new Snowflake.Builder(topology.getLocalNode().getId()).build();
     }
 
     @Override
     public String[] paths() {
         return new String[]{"/image"};
     }
-
 
     @Override
     public HttpMethod[] methods() {
@@ -86,7 +87,7 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
                         node.getHostAddress(), node.getPort(), disk.getPath());
             }
 
-            if (topology.isLocalNode(node)) { // not local, forward request
+            if (!topology.isLocalNode(node)) { // not local, forward request
                 return forward(node, req);
             }
 
@@ -107,8 +108,12 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
                 if (ex != null) {
                     throw new UncheckedExecutionException(ex);
                 }
-                directory.save(disk, image.getIndex());
-                return HttpUtil.newResponse(OK);
+                ImageIndex index = image.getIndex();
+                directory.save(disk, index);
+                FullHttpResponse resp = HttpUtil.newResponse(OK);
+                resp.headers().set(Const.HTTP_HEADER_IMAGE_ID, index.getId());
+                resp.headers().set(Const.HTTP_HEADER_EXPIRE_TIME, index.getExpireTime());
+                return resp;
             });
         } catch (Exception e) {
             CompletableFuture<FullHttpResponse> future = new CompletableFuture<>();
@@ -124,7 +129,7 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
         private FullHttpResponse errorResponse;
 
         private long imageId;
-        private Image.Type imageType;
+        private ImageType imageType;
         private long imageExpireTime;
         private byte[] imageData;
 
@@ -162,7 +167,7 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
             FileUpload fileUpload = (FileUpload) fileData;
             String fileName = fileUpload.getFilename();
             try {
-                this.imageType = Image.Type.parse(fileName);
+                this.imageType = ImageType.fromFileName(fileName);
             } catch (IllegalArgumentException e) {
                 this.errorResponse = HttpUtil.newResponse(BAD_REQUEST,
                         "File " + ((FileUpload) fileData).getFilename() + "is not a image.");
@@ -202,7 +207,7 @@ public class ImageStoreResponder extends AbstractAsyncHttpResponder {
             return imageId;
         }
 
-        public Image.Type getImageType() {
+        public ImageType getImageType() {
             return imageType;
         }
 

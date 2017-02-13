@@ -2,6 +2,7 @@ package com.supconit.ceresfs.http;
 
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.ImageIndex;
 import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.topology.Disk;
 import com.supconit.ceresfs.topology.Node;
@@ -76,11 +77,11 @@ public class ImageQueryResponder extends AbstractAsyncHttpResponder {
             List<Node> unbalancedNodes = topology.getUnbalancedNodes();
             if (unbalancedNodes.isEmpty()) {
                 
-                if (topology.isLocalNode(node)) {
+                if (!topology.isLocalNode(node)) {
                     return forward(node, req);
                 }
 
-                Image.Index index = directory.get(disk, id);
+                ImageIndex index = directory.get(disk, id);
                 if (index == null) {
                     return CompletableFuture.completedFuture(HttpUtil.newResponse(NOT_FOUND));
                 }
@@ -91,7 +92,7 @@ public class ImageQueryResponder extends AbstractAsyncHttpResponder {
             } else if (!topology.getLocalNode().isBalanced()) {
                 // full scan disks
                 for (Disk d : topology.getLocalNode().getDisks()) {
-                    Image.Index index = directory.get(d, id);
+                    ImageIndex index = directory.get(d, id);
                     if (index != null) {
                         Image image = store.get(d, index);
                         String mimeType = image.getIndex().getType().getMimeType();

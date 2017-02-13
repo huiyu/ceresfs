@@ -1,6 +1,7 @@
 package com.supconit.ceresfs.config;
 
 import com.supconit.ceresfs.Const;
+import com.supconit.ceresfs.http.HttpClientPool;
 import com.supconit.ceresfs.topology.Disk;
 
 import org.apache.curator.framework.CuratorFramework;
@@ -75,11 +76,6 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
     public TimeUnit getVolumeCompactPeriodTimeUnit() {
         String timeUnit = localConfig.getVolumeCompactPeriodTimeunit();
         return TimeUnit.valueOf(timeUnit.toUpperCase());
-    }
-
-    @Override
-    public int getImageMaxSize() {
-        return localConfig.getImageMaxSize();
     }
 
     @Override
@@ -218,6 +214,10 @@ public class ConfigurationService implements Configuration, InitializingBean, Di
         return new LocalConfig();
     }
 
+    @Bean
+    public HttpClientPool httpClientPool() {
+        return new HttpClientPool();
+    }
 
     @ConfigurationProperties("ceresfs")
     protected static class GlobalConfig implements Serializable {

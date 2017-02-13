@@ -1,14 +1,21 @@
 package com.supconit.ceresfs.client;
 
+import com.supconit.ceresfs.ImageType;
+
 public class Image {
 
-    private final long id;
-    private final String mimeType;
-    private final byte[] data;
+    private long id;
+    private ImageType type;
+    private long expireTime;
+    private byte[] data;
 
-    public Image(long id, String mimeType, byte[] data) {
+    public Image() {
+    }
+
+    public Image(long id, ImageType type, long expireTime, byte[] data) {
         this.id = id;
-        this.mimeType = mimeType;
+        this.type = type;
+        this.expireTime = expireTime;
         this.data = data;
     }
 
@@ -16,11 +23,32 @@ public class Image {
         return id;
     }
 
-    public String getMimeType() {
-        return mimeType;
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public ImageType getType() {
+        return type;
+    }
+
+    public void setType(ImageType type) {
+        this.type = type;
     }
 
     public byte[] getData() {
         return data;
     }
+
+    public void setData(byte[] data) {
+        this.data = data;
+    }
+
+    public long getExpireTime() {
+        return expireTime;
+    }
+
+    public void setExpireTime(long expireTime) {
+        this.expireTime = expireTime;
+    }
 }
+

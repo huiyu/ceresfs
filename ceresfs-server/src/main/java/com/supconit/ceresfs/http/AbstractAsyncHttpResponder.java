@@ -1,10 +1,12 @@
 package com.supconit.ceresfs.http;
 
+import com.supconit.ceresfs.Const;
 import com.supconit.ceresfs.topology.Node;
 import com.supconit.ceresfs.util.HttpUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Collection;
 import java.util.List;
@@ -30,6 +32,9 @@ public abstract class AbstractAsyncHttpResponder implements HttpResponder {
 
     protected static final String MSG_FORWARD_FORBIDDEN = "Request forward is not allowed";
 
+    @Autowired
+    protected HttpClientPool httpClientPool;
+
     @Override
     public void handle(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
         this.getResponse(req).whenComplete((resp, ex) -> {
@@ -38,9 +43,9 @@ public abstract class AbstractAsyncHttpResponder implements HttpResponder {
                 ctx.writeAndFlush(HttpUtil.newResponse(
                         HttpResponseStatus.INTERNAL_SERVER_ERROR, ex));
             } else {
-                String id = req.headers().get("id");
-                if (id != null) {
-                    resp.headers().set("id", id);
+                String token = req.headers().get(Const.HTTP_TOKEN_NAME);
+                if (token != null) {
+                    resp.headers().set(Const.HTTP_TOKEN_NAME, token);
                 }
                 ctx.writeAndFlush(resp);
             }
@@ -56,7 +61,7 @@ public abstract class AbstractAsyncHttpResponder implements HttpResponder {
 
         FullHttpRequest copy = req.copy();
         copy.headers().set(HttpHeaderNames.MAX_FORWARDS, maxForwards - 1);
-        return HttpClientPool.getOrCreate(node.getHostAddress(), node.getPort()).newCall(copy);
+        return httpClientPool.getOrCreate(node.getHostAddress(), node.getPort()).newCall(copy);
     }
 
     protected int maxForwardOf(FullHttpRequest req, int defaultValue) {

@@ -4,6 +4,7 @@ import com.supconit.ceresfs.config.Configuration;
 import com.supconit.ceresfs.retry.NTimesRetryStrategy;
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.ImageIndex;
 import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.storage.Volume;
 import com.supconit.ceresfs.storage.VolumeContainer;
@@ -96,14 +97,14 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
             reader.seek(0L);
             Image image;
             while ((image = reader.next()) != null) {
-                Image.Index index = image.getIndex();
+                ImageIndex index = image.getIndex();
 
                 if (isDeleted(index)) {
-                    invalid = invalid + Image.Index.FIXED_LENGTH + index.getSize();
+                    invalid = invalid + ImageIndex.FIXED_LENGTH + index.getSize();
                 }
                 // delete index of expired image
                 if (isExpired(currentTime, index)) {
-                    invalid = invalid + Image.Index.FIXED_LENGTH + index.getSize();
+                    invalid = invalid + ImageIndex.FIXED_LENGTH + index.getSize();
                     directory.delete(disk, index.getId());
                 }
             }
@@ -126,7 +127,7 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
             reader.seek(0L);
             Image image;
             while ((image = reader.next()) != null) {
-                Image.Index index = image.getIndex();
+                ImageIndex index = image.getIndex();
                 if (!isDeleted(index) && !isExpired(currentTime, index)) {
                     store.save(
                             disk,
@@ -153,12 +154,12 @@ public class MarkCopyVolumeCompactor implements VolumeCompactor, InitializingBea
         }
     }
 
-    protected boolean isExpired(long currentTime, Image.Index index) {
+    protected boolean isExpired(long currentTime, ImageIndex index) {
         return index.getExpireTime() > 0 && index.getExpireTime() < currentTime;
     }
 
-    protected boolean isDeleted(Image.Index index) {
-        return index.getFlag() == Image.FLAG_DELETED;
+    protected boolean isDeleted(ImageIndex index) {
+        return index.getFlag() == ImageIndex.FLAG_DELETED;
     }
 
     @Override

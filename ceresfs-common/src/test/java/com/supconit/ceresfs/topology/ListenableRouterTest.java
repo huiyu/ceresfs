@@ -57,8 +57,9 @@ public class ListenableRouterTest {
 
     @After
     public void tearDown() throws Exception {
-        tempFolder.delete();
+        zookeeperClient.close();
         testingServer.close();
+        tempFolder.delete();
     }
 
     @Test

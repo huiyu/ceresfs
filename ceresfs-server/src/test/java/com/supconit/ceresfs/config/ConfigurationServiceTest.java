@@ -7,8 +7,6 @@ import org.apache.curator.test.TestingServer;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.*;
@@ -64,6 +62,7 @@ public class ConfigurationServiceTest {
         Thread.sleep(1000L);
         assertEquals(2, configurationService.getReplication());
         assertEquals(10000, configurationService.getVnodeFactor());
+        client.close();
     }
 
     @org.springframework.context.annotation.Configuration
@@ -105,8 +104,8 @@ public class ConfigurationServiceTest {
 
         @Override
         public void destroy() throws Exception {
-            testingServer.close();
             tempFolder.delete();
+            testingServer.close();
         }
     }
 }

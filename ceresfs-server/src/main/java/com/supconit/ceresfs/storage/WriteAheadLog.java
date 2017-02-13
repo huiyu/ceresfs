@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
  * TODO WAL is needed when replication is enabled
  */
 @Component
-public class ImageWriteAheadLog implements InitializingBean, DisposableBean {
+public class WriteAheadLog implements InitializingBean, DisposableBean {
 
     @Override
     public void destroy() throws Exception {

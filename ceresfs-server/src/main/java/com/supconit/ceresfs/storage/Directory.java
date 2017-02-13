@@ -27,7 +27,7 @@ public interface Directory {
      * @param id   image id
      * @return image index
      */
-    Image.Index get(Disk disk, long id);
+    ImageIndex get(Disk disk, long id);
 
     /**
      * Save image index
@@ -35,7 +35,7 @@ public interface Directory {
      * @param disk  the disk image file located
      * @param index image index
      */
-    void save(Disk disk, Image.Index index);
+    void save(Disk disk, ImageIndex index);
 
     /**
      * Delete image index
@@ -59,6 +59,6 @@ public interface Directory {
      * @param disk     the disk image file located
      * @param consumer customized operation
      */
-    void forEachIndex(Disk disk, Consumer<Image.Index> consumer);
+    void forEachIndex(Disk disk, Consumer<ImageIndex> consumer);
 
 }

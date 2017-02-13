@@ -34,7 +34,7 @@ public class CeresFSServer {
     public CeresFSServer(Configuration configuration, CeresFSServerHandler handler) {
         this.port = configuration.getPort();
         this.handler = handler;
-        this.aggregatorSize = configuration.getImageMaxSize() + 8192;
+        this.aggregatorSize = Const.MAX_IMAGE_SIZE + 8192;
     }
 
     public void start() throws InterruptedException {

@@ -3,6 +3,7 @@ package com.supconit.ceresfs.topology;
 import com.google.common.primitives.Longs;
 
 import com.supconit.ceresfs.config.Configuration;
+import com.supconit.ceresfs.http.HttpClientPool;
 import com.supconit.ceresfs.storage.Balancer;
 import com.supconit.ceresfs.storage.DelayedBalancer;
 import com.supconit.ceresfs.storage.Directory;
@@ -55,9 +56,13 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
     }
 
     @Autowired
-    public DistributedTopology(Configuration config, Directory directory, Store store) {
+    public DistributedTopology(Configuration config,
+                               HttpClientPool httpClientPool,
+                               Directory directory,
+                               Store store
+    ) {
         this.config = config;
-        this.balancer = new DelayedBalancer(this, directory, store);
+        this.balancer = new DelayedBalancer(this, httpClientPool, directory, store);
     }
 
     @Override

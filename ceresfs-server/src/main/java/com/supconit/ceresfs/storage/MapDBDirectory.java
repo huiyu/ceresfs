@@ -41,16 +41,16 @@ public class MapDBDirectory implements Directory, DisposableBean {
     }
 
     @Override
-    public Image.Index get(Disk disk, long id) {
+    public ImageIndex get(Disk disk, long id) {
         byte[] data = getOrCreate(disk).get(id);
         if (data == null) {
             return null;
         }
-        return ((Image.Index) Codec.decode(data));
+        return ((ImageIndex) Codec.decode(data));
     }
 
     @Override
-    public void save(Disk disk, Image.Index index) {
+    public void save(Disk disk, ImageIndex index) {
         HTreeMap<Long, byte[]> indexMap = getOrCreate(disk);
         // do save index
         byte[] data = Codec.encode(index);
@@ -94,10 +94,10 @@ public class MapDBDirectory implements Directory, DisposableBean {
     }
 
     @Override
-    public void forEachIndex(Disk disk, Consumer<Image.Index> consumer) {
+    public void forEachIndex(Disk disk, Consumer<ImageIndex> consumer) {
         HTreeMap<Long, byte[]> indexMap = getOrCreate(disk);
         indexMap.forEachValue(value -> {
-            consumer.accept((Image.Index) Codec.decode(value));
+            consumer.accept((ImageIndex) Codec.decode(value));
             return null;
         });
     }

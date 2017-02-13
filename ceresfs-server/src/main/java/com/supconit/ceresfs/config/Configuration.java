@@ -25,8 +25,6 @@ public interface Configuration {
     
     TimeUnit getVolumeCompactPeriodTimeUnit();
     
-    int getImageMaxSize();
-
     int getVnodeFactor();
 
     List<Disk> getDisks();

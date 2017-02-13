@@ -23,12 +23,12 @@ public class MapDBDirectoryTest {
         disk.setPath(path.getPath());
         disk.setWeight(1.0);
         MapDBDirectory directory = new MapDBDirectory();
-        Image.Index index = new Image.Index();
+        ImageIndex index = new ImageIndex();
         index.setId(10001L);
         index.setOffset(1L);
         directory.save(disk, index);
 
-        Image.Index actual = directory.get(disk, 10001L);
+        ImageIndex actual = directory.get(disk, 10001L);
         assertImageIndexEquals(index, actual);
 
         // update
@@ -42,7 +42,7 @@ public class MapDBDirectoryTest {
     }
 
 
-    private void assertImageIndexEquals(Image.Index expect, Image.Index actual) {
+    private void assertImageIndexEquals(ImageIndex expect, ImageIndex actual) {
         assertEquals(expect.getId(), actual.getId());
         assertEquals(expect.getOffset(), actual.getOffset());
         assertEquals(expect.getVolume(), actual.getVolume());

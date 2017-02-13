@@ -2,6 +2,7 @@ package com.supconit.ceresfs.http;
 
 import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.Directory;
+import com.supconit.ceresfs.storage.ImageIndex;
 import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.topology.Disk;
 import com.supconit.ceresfs.topology.Node;
@@ -77,11 +78,11 @@ public class ImageDeletionResponder extends AbstractAsyncHttpResponder {
                 Disk disk = this.topology.route(id);
                 Node node = disk.getNode();
 
-                if (topology.isLocalNode(node)) {
+                if (!topology.isLocalNode(node)) {
                     return forward(node, req);
                 }
 
-                Image.Index index = directory.get(disk, id);
+                ImageIndex index = directory.get(disk, id);
                 store.delete(disk, index);
                 directory.delete(disk, id);
                 return CompletableFuture.completedFuture(HttpUtil.newResponse(OK));

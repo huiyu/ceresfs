@@ -1,8 +1,10 @@
 package com.supconit.ceresfs.compact;
 
+import com.supconit.ceresfs.ImageType;
 import com.supconit.ceresfs.config.Configuration;
 import com.supconit.ceresfs.storage.Directory;
 import com.supconit.ceresfs.storage.Image;
+import com.supconit.ceresfs.storage.ImageIndex;
 import com.supconit.ceresfs.storage.PooledVolumeContainer;
 import com.supconit.ceresfs.storage.Store;
 import com.supconit.ceresfs.storage.Volume;
@@ -42,7 +44,7 @@ public class MarkCopyVolumeCompactorTest {
         MarkCopyVolumeCompactor compactor =
                 new MarkCopyVolumeCompactor(null, null, null, null, null);
         long currentTime = System.currentTimeMillis();
-        Image.Index index = new Image.Index();
+        ImageIndex index = new ImageIndex();
         index.setExpireTime(0L);
         assertFalse(compactor.isExpired(currentTime, index));
 
@@ -60,9 +62,9 @@ public class MarkCopyVolumeCompactorTest {
     public void testIsDeleted() throws Exception {
         MarkCopyVolumeCompactor compactor =
                 new MarkCopyVolumeCompactor(null, null, null, null, null);
-        Image.Index index = new Image.Index();
+        ImageIndex index = new ImageIndex();
         assertFalse(compactor.isDeleted(index));
-        index.setFlag(Image.FLAG_DELETED);
+        index.setFlag(ImageIndex.FLAG_DELETED);
         assertTrue(compactor.isDeleted(index));
     }
 
@@ -85,21 +87,21 @@ public class MarkCopyVolumeCompactorTest {
         assertEquals(0L, mark);
 
         Volume.Writer writer = container.getWriter(volume);
-        writer.writeAndFlush(0L, Image.Type.JPG, new byte[1024], -1L);
+        writer.writeAndFlush(0L, ImageType.JPG, new byte[1024], -1L);
         mark = compactor.mark(time, disk, volume);
         assertEquals(0L, mark);
 
-        writer.writeAndFlush(0L, Image.Type.JPG, new byte[1024], 1L);
+        writer.writeAndFlush(0L, ImageType.JPG, new byte[1024], 1L);
         mark = compactor.mark(time, disk, volume);
-        long expected = 1024L + Image.Index.FIXED_LENGTH;
+        long expected = 1024L + ImageIndex.FIXED_LENGTH;
         assertEquals(expected, mark);
 
-        writer.writeAndFlush(0L, Image.Type.JPG, new byte[2048], time - 1);
+        writer.writeAndFlush(0L, ImageType.JPG, new byte[2048], time - 1);
         mark = compactor.mark(time, disk, volume);
-        expected += (2048 + Image.Index.FIXED_LENGTH);
+        expected += (2048 + ImageIndex.FIXED_LENGTH);
         assertEquals(expected, mark);
 
-        writer.writeAndFlush(0L, Image.Type.JPG, new byte[2048], time + 1);
+        writer.writeAndFlush(0L, ImageType.JPG, new byte[2048], time + 1);
         mark = compactor.mark(time, disk, volume);
         assertEquals(expected, mark);
     }
@@ -123,9 +125,9 @@ public class MarkCopyVolumeCompactorTest {
         Disk disk = new Disk((short) 0, diskPath.getAbsolutePath(), 1.0);
 
         Volume.Writer writer = container.getWriter(volume);
-        writer.writeAndFlush(0L, Image.Type.JPG, new byte[1024], 1L);
-        writer.writeAndFlush(0L, Image.Type.JPG, new byte[1024], -1L);
-        writer.writeAndFlush(0L, Image.Type.JPG, new byte[1024], time + 1);
+        writer.writeAndFlush(0L, ImageType.JPG, new byte[1024], 1L);
+        writer.writeAndFlush(0L, ImageType.JPG, new byte[1024], -1L);
+        writer.writeAndFlush(0L, ImageType.JPG, new byte[1024], time + 1);
 
         compactor.compact(time, disk, volume);
         List<File> allVolumes = container.getAllVolumes(disk.getPath());
@@ -134,7 +136,7 @@ public class MarkCopyVolumeCompactorTest {
         assertNotEquals(String.valueOf(time), newVolume.getName());
 
         container.getWriter(newVolume).flush();
-        long expected = 2 * (1024 + Image.Index.FIXED_LENGTH);
+        long expected = 2 * (1024 + ImageIndex.FIXED_LENGTH);
         assertEquals(expected, newVolume.length());
     }
 }

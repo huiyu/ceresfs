@@ -36,9 +36,7 @@ public class NetUtil {
     public static InetAddress getLocalAddressFromZookeeper(CuratorFramework client) throws Exception {
         Preconditions.checkState(client.getState().equals(CuratorFrameworkState.STARTED));
         CuratorZookeeperClient zookeeperClient = client.getZookeeperClient();
-        while (!zookeeperClient.isConnected())
-            Thread.yield();
-
+        while (!zookeeperClient.isConnected()) Thread.yield();
         ZooKeeper zookeeper = zookeeperClient.getZooKeeper();
         Class<?> clazz = zookeeper.getClass();
         Field field = clazz.getDeclaredField("cnxn");

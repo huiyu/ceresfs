@@ -1,5 +1,6 @@
 package com.supconit.ceresfs.storage;
 
+import com.supconit.ceresfs.ImageType;
 import com.supconit.ceresfs.retry.RetryStrategy;
 import com.supconit.ceresfs.topology.Disk;
 
@@ -20,7 +21,7 @@ public interface Store {
      * @param index image index
      * @return the image
      */
-    Image get(Disk disk, Image.Index index) throws IOException;
+    Image get(Disk disk, ImageIndex index) throws IOException;
 
     /**
      * Save image permanently using default retry strategy
@@ -32,7 +33,7 @@ public interface Store {
      * @return an instance of <code>CompletableFuture</code>, which allow you to process result
      * synchronously or asynchronously
      */
-    CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data);
+    CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data);
 
 
     /**
@@ -46,7 +47,7 @@ public interface Store {
      * @return an instance of <code>CompletableFuture</code>, which allow you to process result
      * either synchronously or asynchronously
      */
-    CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data, long expireTime);
+    CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data, long expireTime);
 
     /**
      * Save image data permanently using specified retry strategy
@@ -59,7 +60,7 @@ public interface Store {
      * @return an instance of <code>CompletableFuture</code>, which allow you to process result
      * either synchronously or asynchronously
      */
-    CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data,
+    CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data,
                                   RetryStrategy retryStrategy);
 
     /**
@@ -74,7 +75,7 @@ public interface Store {
      * @return an instance of <code>CompletableFuture</code>, which allow you to process result
      * either synchronously or asynchronously
      */
-    CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data, long expireTime,
+    CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data, long expireTime,
                                   RetryStrategy retryStrategy);
 
     /**
@@ -83,5 +84,5 @@ public interface Store {
      * @param disk  the disk image located
      * @param index image index
      */
-    void delete(Disk disk, Image.Index index) throws IOException;
+    void delete(Disk disk, ImageIndex index) throws IOException;
 }

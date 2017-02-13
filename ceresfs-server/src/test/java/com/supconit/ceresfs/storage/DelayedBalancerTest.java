@@ -41,7 +41,7 @@ public class DelayedBalancerTest {
     @Test
     public void testCancel() throws InterruptedException {
         AtomicInteger count = new AtomicInteger();
-        Balancer balancer = new DelayedBalancer(null, null, null) {
+        Balancer balancer = new DelayedBalancer(null, null, null, null) {
 
             @Override
             protected void run() {

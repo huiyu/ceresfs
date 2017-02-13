@@ -1,5 +1,7 @@
 package com.supconit.ceresfs.storage;
 
+import com.supconit.ceresfs.ImageType;
+
 import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.File;
@@ -61,19 +63,19 @@ public class Volume {
             lock.lock();
             try {
                 // read index
-                byte[] head = new byte[Image.Index.FIXED_LENGTH];
+                byte[] head = new byte[ImageIndex.FIXED_LENGTH];
                 int bytesRead = raf.read(head);
-                if (bytesRead < Image.Index.FIXED_LENGTH) {
+                if (bytesRead < ImageIndex.FIXED_LENGTH) {
                     return null;
                 }
                 ByteBuffer buffer = ByteBuffer.wrap(head);
-                Image.Index index = new Image.Index();
+                ImageIndex index = new ImageIndex();
                 index.setId(buffer.getLong());
                 index.setVolume(buffer.getLong());
                 index.setFlag(buffer.get());
                 index.setOffset(buffer.getLong());
                 index.setSize(buffer.getInt());
-                index.setType(Image.Type.parse(buffer.get()));
+                index.setType(ImageType.fromCode(buffer.get()));
                 index.setTime(buffer.getLong());
                 index.setExpireTime(buffer.getLong());
                 index.setReplication(buffer.get());
@@ -138,7 +140,7 @@ public class Volume {
             final ReentrantLock lock = this.lock;
             lock.lock();
             try {
-                Image.Index index = image.getIndex(); // 46 bytes, padding to 64 bytes
+                ImageIndex index = image.getIndex(); // 46 bytes, padding to 64 bytes
                 byte[] data = image.getData();
 
                 // offset and total size
@@ -172,8 +174,8 @@ public class Volume {
             }
         }
 
-        public void write(long id, Image.Type type, byte[] data, long expireTime) throws IOException {
-            Image.Index index = new Image.Index();
+        public void write(long id, ImageType type, byte[] data, long expireTime) throws IOException {
+            ImageIndex index = new ImageIndex();
             index.setId(id);
             index.setType(type);
             index.setExpireTime(expireTime);
@@ -202,7 +204,7 @@ public class Volume {
             }
         }
 
-        public void writeAndFlush(long id, Image.Type type, byte[] data, long expireTime)
+        public void writeAndFlush(long id, ImageType type, byte[] data, long expireTime)
                 throws IOException {
             final ReentrantLock lock = this.lock;
             lock.lock();
@@ -215,11 +217,11 @@ public class Volume {
         }
 
         public void markDeleted(long pos) throws IOException {
-            mark(pos, Image.FLAG_DELETED);
+            mark(pos, ImageIndex.FLAG_DELETED);
         }
 
         public void markNormal(long pos) throws IOException {
-            mark(pos, Image.FLAG_NORMAL);
+            mark(pos, ImageIndex.FLAG_NORMAL);
         }
 
         private void mark(long pos, byte flag) throws IOException {

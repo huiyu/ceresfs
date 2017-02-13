@@ -1,7 +1,6 @@
 package com.supconit.ceresfs.storage;
 
-import com.google.common.util.concurrent.UncheckedExecutionException;
-
+import com.supconit.ceresfs.ImageType;
 import com.supconit.ceresfs.config.Configuration;
 
 import org.junit.Rule;
@@ -83,7 +82,7 @@ public class PooledVolumeContainerTest {
         Volume.Writer writer = container.getActiveWriter(disk);
         assertNotNull(writer);
 
-        writer.write(1, Image.Type.JPG, new byte[1024], -1L);
+        writer.write(1, ImageType.JPG, new byte[1024], -1L);
 
         Volume.Writer anotherWriter = container.getActiveWriter(disk);
         assertNotEquals(writer, anotherWriter);

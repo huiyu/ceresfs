@@ -6,18 +6,15 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 
-import com.supconit.ceresfs.CeresFS;
-import com.supconit.ceresfs.config.Configuration;
-import com.supconit.ceresfs.retry.RetryStrategy;
+
+import com.supconit.ceresfs.Const;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.util.Assert;
 
 import java.net.InetSocketAddress;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -39,12 +36,13 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpRequestEncoder;
 import io.netty.handler.codec.http.HttpResponseDecoder;
 
+import static com.google.common.base.Preconditions.*;
+
 public class HttpClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(HttpClient.class);
 
-    private static final int DEFAULT_AGGREGATE_BUFFER_SIZE = 1024 * 1024 * 128;
-    private static final int DEFAULT_TIMEOUT_SECONDS = 15;
+    private static final long DEFAULT_TIMEOUT = TimeUnit.SECONDS.toMillis(15);
 
     private final String host;
     private final int port;
@@ -55,11 +53,7 @@ public class HttpClient {
 
     private final Cache<String, CompletableFuture<FullHttpResponse>> callbacks;
 
-    public HttpClient(String host, int port) {
-        this(host, port, DEFAULT_TIMEOUT_SECONDS);
-    }
-
-    public HttpClient(String host, int port, long timeoutSeconds) {
+    private HttpClient(String host, int port, long timeoutMills, int aggregatorBufferSize) {
         this.host = host;
         this.port = port;
         this.clientHandler = new HttpClientHandler();
@@ -76,13 +70,9 @@ public class HttpClient {
         };
 
         this.callbacks = CacheBuilder.newBuilder()
-                .expireAfterAccess(timeoutSeconds, TimeUnit.SECONDS)
+                .expireAfterAccess(timeoutMills, TimeUnit.MILLISECONDS)
                 .removalListener(listener)
                 .build();
-
-        int aggregatorBufferSize = CeresFS.getContext() == null ?
-                DEFAULT_AGGREGATE_BUFFER_SIZE : // allow http client used without spring context
-                CeresFS.getContext().getBean(Configuration.class).getImageMaxSize() + 8192;
 
         try {
             Bootstrap b = new Bootstrap();
@@ -108,10 +98,10 @@ public class HttpClient {
     }
 
     public CompletableFuture<FullHttpResponse> newCall(HttpRequest request) {
-        String id = UUID.randomUUID().toString();
-        request.headers().set("id", id);
+        String token = UUID.randomUUID().toString();
+        request.headers().set(Const.HTTP_TOKEN_NAME, token);
         CompletableFuture<FullHttpResponse> future = new CompletableFuture<>();
-        this.callbacks.put(id, future);
+        this.callbacks.put(token, future);
         writeAndFlush(request);
         return future;
     }
@@ -131,8 +121,35 @@ public class HttpClient {
     }
 
     protected void writeAndFlush(Object msg) {
-        Assert.notNull(msg);
-        channel.writeAndFlush(msg);
+        channel.writeAndFlush(checkNotNull(msg));
+    }
+
+    public static class Builder {
+
+        private final String host;
+        private final int port;
+
+        private long timeout = DEFAULT_TIMEOUT;
+        private int aggregateBufferSize = Const.MAX_IMAGE_SIZE + 8192;
+
+        public Builder(String host, int port) {
+            this.host = host;
+            this.port = port;
+        }
+
+        public Builder timeout(long time, TimeUnit timeUnit) {
+            this.timeout = timeUnit.toMillis(time);
+            return this;
+        }
+
+        public Builder aggregateBufferSize(int aggregateBufferSize) {
+            this.aggregateBufferSize = aggregateBufferSize;
+            return this;
+        }
+
+        public HttpClient build() {
+            return new HttpClient(host, port, timeout, aggregateBufferSize);
+        }
     }
 
     @ChannelHandler.Sharable
@@ -141,16 +158,15 @@ public class HttpClient {
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg)
                 throws Exception {
-            String id = msg.headers().get("id");
-
-            if (id == null) {
+            String token = msg.headers().get(Const.HTTP_TOKEN_NAME);
+            if (token == null) {
                 InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
                 LOG.error("No response handler for message from ", address.getHostString());
             }
-            Assert.notNull(id);
-            CompletableFuture<FullHttpResponse> future = callbacks.getIfPresent(id);
+
+            CompletableFuture<FullHttpResponse> future = callbacks.getIfPresent(checkNotNull(token));
             if (future != null) {
-                callbacks.invalidate(id);
+                callbacks.invalidate(token);
                 future.complete(msg.copy());
             } else {
                 InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
@@ -159,8 +175,7 @@ public class HttpClient {
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
-                throws Exception {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             LOG.error("HttpClient internal error", cause);
         }
     }

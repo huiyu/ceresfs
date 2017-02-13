@@ -1,5 +1,6 @@
 package com.supconit.ceresfs.storage;
 
+import com.supconit.ceresfs.ImageType;
 import com.supconit.ceresfs.retry.OneTimeRetryStrategy;
 import com.supconit.ceresfs.retry.RetryStrategy;
 import com.supconit.ceresfs.retry.RetrySupplier;
@@ -29,35 +30,35 @@ public class VolumeStore implements Store, DisposableBean {
     }
 
     @Override
-    public Image get(Disk disk, Image.Index index) throws IOException {
+    public Image get(Disk disk, ImageIndex index) throws IOException {
         File volume = new File(disk.getPath(), String.valueOf(index.getVolume()));
         return container.getReader(volume).read(index.getOffset());
     }
 
     @Override
-    public CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data) {
+    public CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data) {
         return save(disk, id, type, data, -1L, new OneTimeRetryStrategy(1000L));
     }
 
     @Override
-    public CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data,
+    public CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data,
                                          long expireTime) {
         return save(disk, id, type, data, expireTime, new OneTimeRetryStrategy(1000L));
     }
 
     @Override
-    public CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data,
+    public CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data,
                                          RetryStrategy retryStrategy) {
         return save(disk, id, type, data, -1L, new OneTimeRetryStrategy(1000L));
     }
 
     @Override
-    public CompletableFuture<Image> save(Disk disk, long id, Image.Type type, byte[] data,
+    public CompletableFuture<Image> save(Disk disk, long id, ImageType type, byte[] data,
                                          long expireTime, RetryStrategy retryStrategy) {
         return CompletableFuture.supplyAsync(
                 new RetrySupplier<>(() -> {
                     try {
-                        Image.Index index = new Image.Index();
+                        ImageIndex index = new ImageIndex();
                         index.setId(id);
                         index.setType(type);
                         index.setExpireTime(expireTime);
@@ -72,7 +73,7 @@ public class VolumeStore implements Store, DisposableBean {
     }
 
     @Override
-    public void delete(Disk disk, Image.Index index) throws IOException {
+    public void delete(Disk disk, ImageIndex index) throws IOException {
         File volume = new File(disk.getPath(), String.valueOf(index.getVolume()));
         container.getWriter(volume).markDeleted(index.getOffset());
     }

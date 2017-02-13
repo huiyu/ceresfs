@@ -52,6 +52,7 @@ public class DistributedTopologyTest {
     @AfterClass
     public static void tearDown() throws Exception {
         TOPOLOGY.destroy();
+        CLIENT.close();
         SERVER.close();
     }
 
@@ -85,11 +86,6 @@ public class DistributedTopologyTest {
         byte[] bytes = CLIENT.getData().forPath(
                 ZKPaths.makePath(Const.ZK_NODES_PATH, String.valueOf(node.getId())));
         assertArrayEquals(Codec.encode(node), bytes);
-    }
-
-    @Test
-    public void testTopologyChangeListener() {
-        // TODO
     }
 
     private static class AlwaysSuccessBalancer implements Balancer {
