@@ -109,6 +109,7 @@ public class CeresFSClient implements Closeable {
     public CompletableFuture<Image> save(ImageType type, long expireTime, byte[] data) {
         try {
             FullHttpRequest request = HttpUtil.newImageUploadRequest(type, expireTime, data);
+            request.headers().set(Const.HTTP_HEADER_MAX_FORWARDS, 1);
             Disk disk = router.route(Longs.toByteArray(random.nextLong()));
             Node node = disk.getNode();
             return httpClientPool.getOrCreate(node.getHostAddress(), node.getPort())

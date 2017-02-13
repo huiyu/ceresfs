@@ -9,8 +9,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Collection;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
@@ -20,7 +18,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
@@ -60,12 +57,12 @@ public abstract class AbstractAsyncHttpResponder implements HttpResponder {
         }
 
         FullHttpRequest copy = req.copy();
-        copy.headers().set(HttpHeaderNames.MAX_FORWARDS, maxForwards - 1);
+        copy.headers().set(Const.HTTP_HEADER_MAX_FORWARDS, maxForwards - 1);
         return httpClientPool.getOrCreate(node.getHostAddress(), node.getPort()).newCall(copy);
     }
 
     protected int maxForwardOf(FullHttpRequest req, int defaultValue) {
-        String headerMaxForwards = req.headers().get(HttpHeaderNames.MAX_FORWARDS);
+        String headerMaxForwards = req.headers().get(Const.HTTP_HEADER_MAX_FORWARDS);
         int maxForwards = defaultValue;
         if (headerMaxForwards != null) {
             maxForwards = Integer.valueOf(headerMaxForwards);

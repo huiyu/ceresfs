@@ -20,6 +20,8 @@ public final class Const {
 
     public static final String HTTP_HEADER_EXPIRE_TIME = "expire-time";
 
+    public static final CharSequence HTTP_HEADER_MAX_FORWARDS = HttpHeaderNames.MAX_FORWARDS;
+
     public static final CharSequence HTTP_HEADER_CONTENT_TYPE = HttpHeaderNames.CONTENT_TYPE;
 
     public static String makeZKNodePath(short nodeId) {
