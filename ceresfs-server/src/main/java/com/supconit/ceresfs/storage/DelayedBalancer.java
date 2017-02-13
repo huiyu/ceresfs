@@ -3,12 +3,12 @@ package com.supconit.ceresfs.storage;
 import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 
-import com.supconit.ceresfs.Const;
 import com.supconit.ceresfs.http.HttpClientPool;
 import com.supconit.ceresfs.retry.NTimesRetryStrategy;
 import com.supconit.ceresfs.topology.Disk;
 import com.supconit.ceresfs.topology.Node;
 import com.supconit.ceresfs.topology.Topology;
+import com.supconit.ceresfs.util.HttpUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,18 +22,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
-import io.netty.handler.codec.http.multipart.FileUpload;
-import io.netty.handler.codec.http.multipart.HttpDataFactory;
-import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 
 public class DelayedBalancer implements Balancer {
 
@@ -205,9 +195,19 @@ public class DelayedBalancer implements Balancer {
 
         Node node = disk.getNode();
         ImageIndex index = image.getIndex();
-        FullHttpRequest request = newPostRequest(image);
+        FullHttpRequest req;
+        try {
+            req = HttpUtil.newImageUploadRequest(
+                    index.getId(),
+                    index.getType(),
+                    index.getExpireTime(),
+                    image.getData());
+        } catch (Exception e) {
+            throw new UncheckedExecutionException(e);
+        }
+
         httpClientPool.getOrCreate(node.getHostAddress(), node.getPort())
-                .newCall(request)
+                .newCall(req)
                 .whenComplete((resp, ex) -> {
                     if (ex != null) {
                         // FIXME: roughly interrupt
@@ -232,37 +232,4 @@ public class DelayedBalancer implements Balancer {
                     }
                 });
     }
-
-    protected FullHttpRequest newPostRequest(Image image) {
-        try {
-            ImageIndex index = image.getIndex();
-            FullHttpRequest request = new DefaultFullHttpRequest(
-                    HttpVersion.HTTP_1_1, HttpMethod.POST, "/image");
-            HttpDataFactory factory = new DefaultHttpDataFactory();
-            HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(request, true);
-            encoder.addBodyAttribute(Const.HTTP_HEADER_IMAGE_ID, String.valueOf(index.getId()));
-            encoder.addBodyAttribute(Const.HTTP_HEADER_EXPIRE_TIME, String.valueOf(index.getExpireTime()));
-
-            FileUpload fileUpload = factory.createFileUpload(
-                    request,
-                    "file",
-                    "test." + index.getType().getFileSuffix(),
-                    "application/octet-stream",
-                    "binary",
-                    null,
-                    image.getData().length);
-
-            fileUpload.setContent(Unpooled.wrappedBuffer(image.getData()));
-            encoder.addBodyHttpData(fileUpload);
-            encoder.finalizeRequest();
-            HttpContent content;
-            while ((content = encoder.readChunk((ByteBufAllocator) null)) != null) {
-                request.content().writeBytes(content.content());
-            }
-            return request;
-        } catch (Exception e) {
-            throw new UncheckedExecutionException(e);
-        }
-    }
-
 }
