@@ -19,6 +19,8 @@ public final class Const {
     public static final String HTTP_HEADER_IMAGE_ID = "id";
 
     public static final String HTTP_HEADER_EXPIRE_TIME = "expire-time";
+    
+    public static final String HTTP_HEADER_REPLICATION = "replication";
 
     public static final CharSequence HTTP_HEADER_MAX_FORWARDS = HttpHeaderNames.MAX_FORWARDS;
 

@@ -80,12 +80,14 @@ public class HttpUtil {
 
     public static FullHttpRequest newImageUploadRequest(long id,
                                                         ImageType type,
-                                                        long expireTime,
+                                                        int replication,
+                                                        Long expireTime,
                                                         byte[] data) throws Exception {
         FullHttpRequest request = newRequest(HttpMethod.POST, "/image");
         HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(request, true);
         encoder.addBodyAttribute(Const.HTTP_HEADER_EXPIRE_TIME, String.valueOf(expireTime));
         encoder.addBodyAttribute(Const.HTTP_HEADER_IMAGE_ID, String.valueOf(id));
+        encoder.addBodyAttribute(Const.HTTP_HEADER_REPLICATION, String.valueOf(replication));
         FileUpload fileUpload = USE_MEMORY.createFileUpload(
                 request,
                 DEFAULT_FILE_NAME,
@@ -106,11 +108,13 @@ public class HttpUtil {
     }
 
     public static FullHttpRequest newImageUploadRequest(ImageType type,
+                                                        int replication,
                                                         long expireTime,
                                                         byte[] data) throws Exception {
         FullHttpRequest request = newRequest(HttpMethod.POST, "/image");
         HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(request, true);
         encoder.addBodyAttribute(Const.HTTP_HEADER_EXPIRE_TIME, String.valueOf(expireTime));
+        encoder.addBodyAttribute(Const.HTTP_HEADER_REPLICATION, String.valueOf(replication));
         FileUpload fileUpload = USE_MEMORY.createFileUpload(
                 request,
                 DEFAULT_FILE_NAME,
