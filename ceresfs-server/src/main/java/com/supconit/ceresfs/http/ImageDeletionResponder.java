@@ -1,6 +1,5 @@
 package com.supconit.ceresfs.http;
 
-import com.supconit.ceresfs.storage.Image;
 import com.supconit.ceresfs.storage.Directory;
 import com.supconit.ceresfs.storage.ImageIndex;
 import com.supconit.ceresfs.storage.Store;
@@ -59,7 +58,6 @@ public class ImageDeletionResponder extends AbstractAsyncHttpResponder {
     protected CompletableFuture<FullHttpResponse> getResponse(FullHttpRequest req) {
         HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(USE_MEMORY, req);
         try {
-
             InterfaceHttpData idData = decoder.getBodyHttpData("id");
             if (idData == null) {
                 FullHttpResponse resp = HttpUtil.newResponse(BAD_REQUEST, "No image id");

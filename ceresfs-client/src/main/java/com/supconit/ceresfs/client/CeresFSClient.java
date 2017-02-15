@@ -1,6 +1,5 @@
 package com.supconit.ceresfs.client;
 
-import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Longs;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 
@@ -20,9 +19,7 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 
-import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
@@ -50,7 +47,7 @@ public class CeresFSClient implements Closeable {
     private final RetryStrategy retryStrategy;
 
     public CeresFSClient(String zookeeperAddress) throws Exception {
-        this(zookeeperAddress, new NTimesRetryStrategy(6, 10));
+        this(zookeeperAddress, new NTimesRetryStrategy(6, 10000L));
     }
 
     public CeresFSClient(String zookeeperAddress, RetryStrategy retryStrategy) throws Exception {
@@ -106,7 +103,7 @@ public class CeresFSClient implements Closeable {
         return CompletableFuture.supplyAsync(new RetrySupplier<>(() -> {
             try {
                 FullHttpRequest request =
-                        HttpUtil.newImageUploadRequest(type, replication, expireTime, data);
+                        HttpUtil.newImageUploadRequest(id, type, replication, expireTime, data);
                 Disk disk = router.route(Longs.toByteArray(id));
                 Node node = disk.getNode();
                 FullHttpResponse resp = httpClientPool
@@ -186,26 +183,5 @@ public class CeresFSClient implements Closeable {
         router.close();
         httpClientPool.close();
         client.close();
-    }
-
-    public static void main(String[] args) throws Exception {
-        CeresFSClient client = new CeresFSClient("127.0.0.1:2181");
-        FileInputStream in = new FileInputStream("/Users/yuhui/Pictures/saber.jpg");
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteStreams.copy(in, out);
-        in.close();
-
-        byte[] data = out.toByteArray();
-        for (int i = 0; i < 100000; i++) {
-            client.save(ImageType.JPG, data)
-                    .whenComplete((image, ex) -> {
-                        if (ex != null) {
-                            ex.printStackTrace();
-                        } else {
-                            System.out.println(image.getId());
-                        }
-                    });
-            Thread.sleep(500L);
-        }
     }
 }

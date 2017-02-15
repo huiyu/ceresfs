@@ -200,6 +200,7 @@ public class DelayedBalancer implements Balancer {
             req = HttpUtil.newImageUploadRequest(
                     index.getId(),
                     index.getType(),
+                    index.getReplication(),
                     index.getExpireTime(),
                     image.getData());
         } catch (Exception e) {
@@ -222,7 +223,7 @@ public class DelayedBalancer implements Balancer {
                             directory.delete(disk, index.getId());
                         } catch (Exception e) {
                             // FIXME: roughly interrupt
-                            LOG.error("Delete file {} failed \n {}", node, resp.toString());
+                            LOG.error("Delete " + index + " failed \n {}", e);
                             cancel();
                         }
                     } else {

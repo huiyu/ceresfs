@@ -11,6 +11,7 @@ ceresfs:
   volume-compact-period-timeunit: MINUTES
   disk-default-weight: 1
   vnode-factor: 10000
+  replica-async-update: disable
   
   # Data balance config
   balance-delay: 10
@@ -21,6 +22,3 @@ ceresfs:
       id: 1
       path: /tmp/ceresfs
       weight: 1
-      
-  
-    

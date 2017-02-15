@@ -215,7 +215,8 @@ public class DistributedTopology implements Topology, InitializingBean, Disposab
 
         // check 
         if (client.checkExists().forPath(path) != null) {
-            throw new BeanInstantiationException(this.getClass(), "node[id=" + id + "] already exists");
+            throw new BeanInstantiationException(this.getClass(),
+                    "node[id=" + id + "] already exists");
         }
 
         byte[] data = Codec.encode(node);
