@@ -9,6 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
+    <name>CeresFS Assembly</name>
     <artifactId>ceresfs-assembly</artifactId>
     <packaging>pom</packaging>
 
@@ -28,7 +29,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.supconit.ceresfs.CeresFS</mainClass>
+                            <mainClass>io.github.huiyu.ceresfs.CeresFS</mainClass>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
                         </manifest>
