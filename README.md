@@ -1,20 +1,5 @@
 # CeresFS
 
-CeresFS是一个简单、高可用、可扩展的分布式图片存储系统。
+CeresFS is a scalable distributed image storage system.
 
-
-
-## 构建
-
-
-
-## 安装部署
-
-
-
-## 基本使用
-
-
-
-## 性能测试
 
